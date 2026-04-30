@@ -24,6 +24,7 @@ from ontology import (
 
 # ─── Default params (P(G) dan P(S) dari literatur) ────────────────────────────
 DEFAULT_BKT_PARAMS = {
+    "p_transit":         0.10,
     "p_guess":           0.25,
     "p_slip":            0.10,
     "mastery_threshold": 0.80,
