@@ -252,9 +252,15 @@ def next_question(sid):
 @app.post("/api/answer/<sid>")
 def answer(sid):
     try:
-        data    = request.json or {}
-        kc_id   = data["kc_id"]
-        correct = bool(data["correct"])
+        data      = request.json or {}
+        kc_id     = data["kc_id"]
+        # Frontend bisa kirim correct langsung (pilgan/bs) atau user_answer (isian)
+        if "user_answer" in data:
+            correct_answer = data.get("correct_answer", "").strip().lower()
+            user_ans       = str(data["user_answer"]).strip().lower()
+            correct        = user_ans == correct_answer
+        else:
+            correct = bool(data["correct"])
 
         student = _rebuild_student_model(sid)
         result  = process_response(student, G, kc_id, correct)
