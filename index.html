@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BelajarAja! 🌟</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --sky:    #4FC3F7;
+  --sun:    #FFD54F;
+  --grass:  #81C784;
+  --coral:  #FF8A65;
+  --purple: #CE93D8;
+  --mint:   #80CBC4;
+  --card:   #FFFDE7;
+  --ink:    #37474F;
+  --radius: 20px;
+  --shadow: 0 6px 0 rgba(0,0,0,0.12);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Nunito', sans-serif;
+  background: linear-gradient(160deg, #E3F2FD 0%, #F3E5F5 50%, #E8F5E9 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+/* ── Screens ─────────────────────────────────────────────────────────── */
+.screen { display: none; width: 100%; max-width: 480px; }
+.screen.active { display: block; }
+
+/* ── Card ────────────────────────────────────────────────────────────── */
+.card {
+  background: white;
+  border-radius: var(--radius);
+  padding: 32px 28px;
+  box-shadow: var(--shadow), 0 2px 32px rgba(0,0,0,0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 6px;
+  background: linear-gradient(90deg, var(--sky), var(--purple), var(--coral), var(--sun));
+}
+
+/* ── Typography ──────────────────────────────────────────────────────── */
+.title {
+  font-size: 2.4rem;
+  font-weight: 900;
+  color: var(--ink);
+  text-align: center;
+  line-height: 1.1;
+}
+
+.title span { color: var(--coral); }
+
+.subtitle {
+  font-size: 1rem;
+  color: #78909C;
+  text-align: center;
+  margin-top: 8px;
+}
+
+.label {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #90A4AE;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+/* ── Input ───────────────────────────────────────────────────────────── */
+.input {
+  width: 100%;
+  padding: 14px 18px;
+  font-size: 1.1rem;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 700;
+  border: 3px solid #E0E0E0;
+  border-radius: 14px;
+  outline: none;
+  transition: border-color .2s;
+  color: var(--ink);
+}
+
+.input:focus { border-color: var(--sky); }
+
+/* ── Avatar Picker ───────────────────────────────────────────────────── */
+.avatars {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin: 16px 0;
+}
+
+.av {
+  width: 64px; height: 64px;
+  font-size: 2.2rem;
+  border-radius: 50%;
+  border: 4px solid #E0E0E0;
+  background: #F5F5F5;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.av.selected { border-color: var(--coral); background: #FFF3E0; transform: scale(1.15); }
+
+/* ── Buttons ─────────────────────────────────────────────────────────── */
+.btn {
+  display: block;
+  width: 100%;
+  padding: 16px;
+  font-size: 1.1rem;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all .15s;
+  box-shadow: var(--shadow);
+  margin-top: 12px;
+}
+
+.btn:active { transform: translateY(4px); box-shadow: 0 2px 0 rgba(0,0,0,0.12); }
+
+.btn-primary { background: var(--coral); color: white; }
+.btn-primary:hover { background: #FF7043; }
+
+.btn-sky    { background: var(--sky);    color: white; }
+.btn-grass  { background: var(--grass);  color: white; }
+.btn-purple { background: var(--purple); color: white; }
+.btn-sun    { background: var(--sun);    color: var(--ink); }
+
+/* ── Top Bar ─────────────────────────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.player-badge {
+  display: flex; align-items: center; gap: 8px;
+  background: #F5F5F5;
+  border-radius: 50px;
+  padding: 6px 14px 6px 8px;
+}
+
+.player-av { font-size: 1.6rem; }
+.player-name { font-weight: 800; font-size: 0.95rem; color: var(--ink); }
+
+.stars-badge {
+  display: flex; align-items: center; gap: 4px;
+  background: var(--sun);
+  border-radius: 50px;
+  padding: 6px 14px;
+  font-weight: 800;
+  font-size: 1rem;
+  color: #5D4037;
+}
+
+/* ── Progress Bar ────────────────────────────────────────────────────── */
+.progress-wrap {
+  background: #F5F5F5;
+  border-radius: 50px;
+  height: 14px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: 50px;
+  background: linear-gradient(90deg, var(--sky), var(--purple));
+  transition: width .6s cubic-bezier(.34,1.56,.64,1);
+}
+
+.progress-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #90A4AE;
+  text-align: right;
+}
+
+/* ── KC Topic Badge ──────────────────────────────────────────────────── */
+.kc-badge {
+  display: inline-block;
+  background: #F3E5F5;
+  color: #7B1FA2;
+  border-radius: 50px;
+  padding: 4px 14px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  margin-bottom: 16px;
+}
+
+/* ── Question ────────────────────────────────────────────────────────── */
+.question-box {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 24px;
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 24px;
+  line-height: 1.5;
+  border: 3px solid #FFF9C4;
+  min-height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Answer Options ──────────────────────────────────────────────────── */
+.options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.option {
+  padding: 18px 12px;
+  font-size: 1.05rem;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  border: 3px solid #E0E0E0;
+  border-radius: 16px;
+  background: white;
+  cursor: pointer;
+  text-align: center;
+  transition: all .15s;
+  color: var(--ink);
+  box-shadow: 0 4px 0 #E0E0E0;
+}
+
+.option:hover:not(:disabled) {
+  border-color: var(--sky);
+  background: #E3F2FD;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #B3E5FC;
+}
+
+.option.correct {
+  border-color: var(--grass);
+  background: #E8F5E9;
+  box-shadow: 0 4px 0 #A5D6A7;
+  color: #2E7D32;
+  animation: pop .3s ease;
+}
+
+.option.wrong {
+  border-color: var(--coral);
+  background: #FBE9E7;
+  box-shadow: 0 4px 0 #FFCCBC;
+  color: #BF360C;
+}
+
+.option:disabled { cursor: default; }
+
+/* ── Feedback Banner ─────────────────────────────────────────────────── */
+.feedback {
+  border-radius: 14px;
+  padding: 16px 20px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 1.1rem;
+  margin-top: 18px;
+  display: none;
+}
+
+.feedback.show { display: block; animation: slideUp .3s ease; }
+.feedback.good { background: #E8F5E9; color: #2E7D32; }
+.feedback.bad  { background: #FBE9E7; color: #BF360C; }
+
+.feedback .emoji { font-size: 2rem; display: block; margin-bottom: 4px; }
+
+/* ── Mastery Toast ───────────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  top: 24px; left: 50%;
+  transform: translateX(-50%) translateY(-80px);
+  background: white;
+  border-radius: 50px;
+  padding: 14px 28px;
+  font-weight: 800;
+  font-size: 1rem;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  border: 3px solid var(--sun);
+  transition: transform .4s cubic-bezier(.34,1.56,.64,1);
+  z-index: 999;
+  white-space: nowrap;
+}
+
+.toast.show { transform: translateX(-50%) translateY(0); }
+
+/* ── Done Screen ─────────────────────────────────────────────────────── */
+.done-emoji { font-size: 5rem; text-align: center; display: block; margin-bottom: 16px; }
+
+/* ── Animations ──────────────────────────────────────────────────────── */
+@keyframes pop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.08); }
+  100% { transform: scale(1); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes starPop {
+  0%   { transform: scale(0) rotate(-20deg); opacity: 0; }
+  60%  { transform: scale(1.3) rotate(10deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+.star-anim { display: inline-block; animation: starPop .5s ease forwards; }
+
+/* ── Next button ─────────────────────────────────────────────────────── */
+#btn-next { display: none; margin-top: 16px; }
+
+/* ── Decoration ──────────────────────────────────────────────────────── */
+.deco {
+  position: fixed;
+  font-size: 3rem;
+  opacity: 0.12;
+  pointer-events: none;
+  user-select: none;
+}
+</style>
+</head>
+<body>
+
+<!-- Decoration -->
+<span class="deco" style="top:5%; left:3%">⭐</span>
+<span class="deco" style="top:12%; right:4%">🌙</span>
+<span class="deco" style="bottom:8%; left:6%">🌈</span>
+<span class="deco" style="bottom:12%; right:3%">✨</span>
+
+<!-- Toast -->
+<div class="toast" id="toast">🎉 Topik dikuasai!</div>
+
+<!-- ── SCREEN: Register ─────────────────────────────────────────────── -->
+<div class="screen active" id="screen-register">
+  <div class="card">
+    <div class="title">Halo! 👋<br><span>Siapa namamu?</span></div>
+    <div class="subtitle">Yuk belajar Matematika bersama!</div>
+
+    <div style="margin-top:28px;">
+      <div class="label">Nama kamu</div>
+      <input class="input" id="inp-name" type="text" placeholder="Tulis namamu di sini..."
+             maxlength="20" autocomplete="off">
+    </div>
+
+    <div style="margin-top:20px;">
+      <div class="label">Pilih karakter</div>
+      <div class="avatars" id="avatar-picker">
+        <div class="av selected" data-av="1">🦊</div>
+        <div class="av" data-av="2">🐧</div>
+        <div class="av" data-av="3">🦄</div>
+        <div class="av" data-av="4">🐸</div>
+        <div class="av" data-av="5">🐼</div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="btn-start">Mulai Belajar! 🚀</button>
+  </div>
+</div>
+
+<!-- ── SCREEN: Question ─────────────────────────────────────────────── -->
+<div class="screen" id="screen-question">
+  <div class="card">
+
+    <!-- Top bar -->
+    <div class="topbar">
+      <div class="player-badge">
+        <span class="player-av" id="disp-av">🦊</span>
+        <span class="player-name" id="disp-name">-</span>
+      </div>
+      <div class="stars-badge">⭐ <span id="disp-stars">0</span></div>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-wrap">
+      <div class="progress-bar" id="prog-bar" style="width:0%"></div>
+    </div>
+    <div class="progress-label" id="prog-label">0 / 23 topik</div>
+
+    <!-- KC badge -->
+    <div style="margin-top:16px; margin-bottom:4px;">
+      <span class="kc-badge" id="kc-name">Memuat...</span>
+    </div>
+
+    <!-- Question -->
+    <div class="question-box" id="question-text">Memuat soal...</div>
+
+    <!-- Options -->
+    <div class="options" id="options-wrap"></div>
+
+    <!-- Feedback -->
+    <div class="feedback" id="feedback">
+      <span class="emoji" id="feedback-emoji"></span>
+      <span id="feedback-text"></span>
+    </div>
+
+    <!-- Next -->
+    <button class="btn btn-sky" id="btn-next">Soal Berikutnya ➡️</button>
+  </div>
+</div>
+
+<!-- ── SCREEN: Done ─────────────────────────────────────────────────── -->
+<div class="screen" id="screen-done">
+  <div class="card" style="text-align:center;">
+    <span class="done-emoji">🏆</span>
+    <div class="title">Hebat sekali!<br><span>Kamu luar biasa!</span></div>
+    <p style="margin-top:16px; color:#78909C; font-size:1rem; font-weight:600;">
+      Semua materi sudah selesai dipelajari.
+    </p>
+    <div style="margin-top:24px; font-size:2rem; font-weight:900; color:#F57F17;">
+      ⭐ <span id="final-stars">0</span> bintang
+    </div>
+    <button class="btn btn-primary" id="btn-again" style="margin-top:28px;">
+      Ulangi Lagi 🔄
+    </button>
+  </div>
+</div>
+
+<script>
+const AVATARS = {1:"🦊",2:"🐧",3:"🦄",4:"🐸",5:"🐼"};
+const CORRECT_MSG = [
+  ["Benar sekali! 🎉","Kamu hebat!"],
+  ["Luar biasa! ⭐","Terus semangat!"],
+  ["Betul! 🌟","Pintar!"],
+  ["Yay! 🥳","Jawaban tepat!"],
+];
+const WRONG_MSG = [
+  ["Hampir benar! 💪","Coba lagi ya!"],
+  ["Belum tepat 🤔","Jangan menyerah!"],
+  ["Yuk coba lagi! 😊","Pasti bisa!"],
+];
+
+let state = {
+  sid: null,
+  name: "",
+  avatar: 1,
+  currentKC: null,
+  currentAnswer: null,
+  answered: false,
+};
+
+// ── Utils ────────────────────────────────────────────────────────────────────
+function show(id) {
+  document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+  document.getElementById("screen-" + id).classList.add("active");
+}
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(() => t.classList.remove("show"), 2800);
+}
+
+async function api(path, method = "GET", body = null) {
+  const opts = { method, headers: {"Content-Type":"application/json"} };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(path, opts);
+  return r.json();
+}
+
+// ── Register ─────────────────────────────────────────────────────────────────
+document.querySelectorAll(".av").forEach(el => {
+  el.addEventListener("click", () => {
+    document.querySelectorAll(".av").forEach(a => a.classList.remove("selected"));
+    el.classList.add("selected");
+    state.avatar = parseInt(el.dataset.av);
+  });
+});
+
+document.getElementById("btn-start").addEventListener("click", async () => {
+  const name = document.getElementById("inp-name").value.trim();
+  if (!name) {
+    document.getElementById("inp-name").focus();
+    document.getElementById("inp-name").style.borderColor = "var(--coral)";
+    return;
+  }
+
+  const res = await api("/api/register", "POST", { name, avatar: state.avatar });
+  if (res.error) { alert("Gagal daftar, coba lagi."); return; }
+
+  state.sid  = res.student_id;
+  state.name = res.name;
+
+  document.getElementById("disp-name").textContent = name;
+  document.getElementById("disp-av").textContent = AVATARS[state.avatar];
+
+  show("question");
+  loadNextQuestion();
+});
+
+// ── Question Flow ─────────────────────────────────────────────────────────────
+async function loadNextQuestion() {
+  state.answered = false;
+  document.getElementById("feedback").classList.remove("show");
+  document.getElementById("btn-next").style.display = "none";
+  document.getElementById("question-text").textContent = "Memuat soal... ⏳";
+  document.getElementById("options-wrap").innerHTML = "";
+  document.getElementById("kc-name").textContent = "...";
+
+  const q = await api(`/api/next-question/${state.sid}`);
+
+  if (q.done) {
+    const s = await api(`/api/student/${state.sid}`);
+    document.getElementById("final-stars").textContent = s.total_stars;
+    show("done");
+    return;
+  }
+
+  state.currentKC     = q.kc_id;
+  state.currentAnswer = q.answer;
+
+  document.getElementById("kc-name").textContent   = "📚 " + q.kc_name;
+  document.getElementById("question-text").textContent = q.q;
+
+  // Render options
+  const wrap = document.getElementById("options-wrap");
+  const colors = ["btn-sky","btn-coral","btn-grass","btn-purple"];
+  q.options.forEach((opt, i) => {
+    const btn = document.createElement("button");
+    btn.className = "option";
+    btn.textContent = opt;
+    btn.dataset.val = opt;
+    btn.addEventListener("click", () => selectAnswer(opt));
+    wrap.appendChild(btn);
+  });
+
+  // Update progress
+  const prog = await api(`/api/progress/${state.sid}`);
+  updateProgress(prog);
+}
+
+async function selectAnswer(chosen) {
+  if (state.answered) return;
+  state.answered = true;
+
+  const correct = chosen === state.currentAnswer;
+
+  // Highlight options
+  document.querySelectorAll(".option").forEach(btn => {
+    btn.disabled = true;
+    if (btn.dataset.val === state.currentAnswer) btn.classList.add("correct");
+    else if (btn.dataset.val === chosen && !correct) btn.classList.add("wrong");
+  });
+
+  // Send to API
+  const res = await api(`/api/answer/${state.sid}`, "POST", {
+    kc_id:   state.currentKC,
+    correct: correct,
+  });
+
+  // Feedback
+  const msgs = correct ? CORRECT_MSG : WRONG_MSG;
+  const [title, sub] = msgs[Math.floor(Math.random() * msgs.length)];
+
+  const fb = document.getElementById("feedback");
+  document.getElementById("feedback-emoji").textContent = correct ? "🌟" : "💡";
+  document.getElementById("feedback-text").innerHTML =
+    `<strong>${title}</strong><br><span style="font-size:.9rem;font-weight:600">${sub}</span>`;
+  if (res.stars_earned > 0) {
+    document.getElementById("feedback-text").innerHTML +=
+      `<br><span class="star-anim" style="font-size:1.2rem;margin-top:4px;display:inline-block">` +
+      `+${res.stars_earned} ⭐</span>`;
+  }
+  fb.className = "feedback show " + (correct ? "good" : "bad");
+
+  // Stars update
+  document.getElementById("disp-stars").textContent = res.progress.stars;
+
+  // Mastery toast
+  if (res.mastered) showToast("🎊 Topik dikuasai: " + state.currentKC);
+
+  // Progress update
+  updateProgress(res.progress);
+
+  // Show next button
+  document.getElementById("btn-next").style.display = "block";
+}
+
+function updateProgress(prog) {
+  const pct = prog.pct || 0;
+  document.getElementById("prog-bar").style.width  = pct + "%";
+  document.getElementById("prog-label").textContent =
+    `${prog.mastered} / ${prog.total} topik selesai`;
+  document.getElementById("disp-stars").textContent = prog.stars;
+}
+
+document.getElementById("btn-next").addEventListener("click", loadNextQuestion);
+document.getElementById("btn-again").addEventListener("click", () => {
+  state.sid = null;
+  document.getElementById("inp-name").value = "";
+  show("register");
+});
+</script>
+</body>
+</html>

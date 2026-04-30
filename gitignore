@@ -1,0 +1,8 @@
+# Data generated at runtime
+data/*.csv
+data/*.db
+data/estimated_params.json
+__pycache__/
+*.pyc
+.env
+cloudflared

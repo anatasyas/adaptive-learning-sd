@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: adaptive-learning-sd
+    runtime: python3
+    buildCommand: pip install -r requirements.txt && python database.py && python seed_questions.py
+    startCommand: python app.py
+    envVars:
+      - key: FLASK_ENV
+        value: production
