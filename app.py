@@ -120,6 +120,43 @@ def _progress_summary(student_id: str) -> dict:
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
+
+@app.get("/api/topics/<sid>")
+def topics(sid):
+    """Status semua topik untuk siswa — untuk topic selection screen."""
+    try:
+        db_states = get_all_kc_states(sid)
+        mastered  = {kc for kc, s in db_states.items() if s["is_mastered"]}
+        available = set(get_available_kcs(G, mastered))
+
+        topic_meta = G.graph.get("topics", {})
+        result = []
+
+        for topic_id, meta in topic_meta.items():
+            kcs_in_topic = [
+                n for n, d in G.nodes(data=True) if d.get("topic") == topic_id
+            ]
+            n_total    = len(kcs_in_topic)
+            n_mastered = sum(1 for k in kcs_in_topic if k in mastered)
+            n_available = sum(1 for k in kcs_in_topic if k in available)
+            locked     = n_available == 0 and n_mastered < n_total
+            completed  = n_mastered == n_total
+
+            result.append({
+                "id":         topic_id,
+                "label":      meta.get("label", topic_id),
+                "nctm":       meta.get("nctm", ""),
+                "n_total":    n_total,
+                "n_mastered": n_mastered,
+                "locked":     locked,
+                "completed":  completed,
+            })
+
+        return jsonify(result)
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/")
 def index():
     for candidate in [
@@ -178,12 +215,33 @@ def student_info(sid):
 @app.get("/api/next-question/<sid>")
 def next_question(sid):
     try:
-        student = _rebuild_student_model(sid)
-        next_kc = select_next_kc(student, G)
+        topic_filter = request.args.get("topic")   # opsional
+        student  = _rebuild_student_model(sid)
+        mastered = student.mastered_set()
+        available = get_available_kcs(G, mastered)
 
-        if next_kc is None:
+        if topic_filter:
+            available = [
+                k for k in available
+                if get_kc_info(G, k).get("topic") == topic_filter
+            ]
+
+        if not available:
+            # Cek apakah topik ini sudah selesai semua
+            if topic_filter:
+                kcs_in_topic = [
+                    n for n, d in G.nodes(data=True)
+                    if d.get("topic") == topic_filter
+                ]
+                if all(k in mastered for k in kcs_in_topic):
+                    return jsonify({"done": True,
+                                    "message": "Topik ini sudah selesai! 🎉"})
+                return jsonify({"done": True,
+                                "message": "Selesaikan topik lain dulu ya! 🔒"})
             return jsonify({"done": True, "message": "Semua materi selesai! 🎉"})
 
+        # Pilih KC dengan P(L) terendah di antara yang available
+        next_kc = min(available, key=lambda k: student.kc_states[k].p_know)
         q = _get_question(next_kc)
         return jsonify({"done": False, **q})
     except Exception as e:
