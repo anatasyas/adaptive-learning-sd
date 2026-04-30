@@ -205,6 +205,34 @@ def progress(sid):
 
 
 
+
+@app.get("/debug")
+def debug():
+    """Cek status sistem. Buka /debug di browser."""
+    from database import get_conn, count_questions, DB_PATH
+    import os
+    try:
+        with get_conn() as conn:
+            n_q  = conn.execute("SELECT COUNT(*) FROM questions").fetchone()[0]
+            n_s  = conn.execute("SELECT COUNT(*) FROM students").fetchone()[0]
+            n_kc = conn.execute("SELECT COUNT(*) FROM kc_states").fetchone()[0]
+        db_ok = True
+    except Exception as e:
+        n_q = n_s = n_kc = 0
+        db_ok = str(e)
+
+    return jsonify({
+        "db_path":        DB_PATH,
+        "db_exists":      os.path.exists(DB_PATH),
+        "db_ok":          db_ok,
+        "n_questions":    n_q,
+        "n_students":     n_s,
+        "n_kc_states":    n_kc,
+        "data_file":      DATA_PATH,
+        "data_exists":    os.path.exists(DATA_PATH),
+        "ontology_nodes": G.number_of_nodes() if G else 0,
+    })
+
 # ─── Admin Routes (untuk peneliti) ───────────────────────────────────────────
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "skripsi2025")  # ganti via env var
 
