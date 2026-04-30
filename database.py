@@ -65,15 +65,16 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS questions (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            kc_id      TEXT NOT NULL,
-            question   TEXT NOT NULL,
-            opt_a      TEXT NOT NULL,
-            opt_b      TEXT NOT NULL,
-            opt_c      TEXT NOT NULL,
-            opt_d      TEXT NOT NULL,
-            answer     TEXT NOT NULL CHECK(answer IN ('a','b','c','d')),
-            difficulty INTEGER NOT NULL DEFAULT 1
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            kc_id         TEXT NOT NULL,
+            question_type TEXT NOT NULL DEFAULT 'pilgan',
+            question      TEXT NOT NULL,
+            opt_a         TEXT NOT NULL DEFAULT '',
+            opt_b         TEXT NOT NULL DEFAULT '',
+            opt_c         TEXT NOT NULL DEFAULT '',
+            opt_d         TEXT NOT NULL DEFAULT '',
+            answer        TEXT NOT NULL,
+            difficulty    INTEGER NOT NULL DEFAULT 1
         );
         """)
 
@@ -144,16 +145,23 @@ def get_interaction_count(student_id):
 
 
 # ── Questions ─────────────────────────────────────────────────────────────────
-def insert_question(kc_id, question, opt_a, opt_b, opt_c, opt_d, answer, difficulty=1):
-    """answer: 'a'|'b'|'c'|'d' — huruf opsi yang benar."""
+def insert_question(kc_id, question, opt_a, opt_b, opt_c, opt_d, answer,
+                    difficulty=1, question_type='pilgan'):
+    """
+    question_type:
+      'pilgan'     — 4 pilihan (a/b/c/d)
+      'benar_salah'— 2 opsi: opt_a=teks pertanyaan, answer='benar'/'salah'
+      'isian'      — jawab dengan mengetik angka, answer = angka benar (string)
+    """
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO questions (kc_id,question,opt_a,opt_b,opt_c,opt_d,answer,difficulty) VALUES (?,?,?,?,?,?,?,?)",
-            (kc_id, question, opt_a, opt_b, opt_c, opt_d, answer.lower(), difficulty)
+            "INSERT INTO questions (kc_id,question_type,question,opt_a,opt_b,opt_c,opt_d,answer,difficulty) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (kc_id, question_type, question, opt_a, opt_b, opt_c, opt_d, str(answer).lower(), difficulty)
         )
 
 def get_random_question(kc_id):
-    """Ambil satu soal acak untuk KC tertentu. Return dict siap pakai frontend."""
+    """Ambil satu soal acak. Return dict siap pakai frontend."""
     with get_conn() as conn:
         row = conn.execute(
             "SELECT * FROM questions WHERE kc_id=? ORDER BY RANDOM() LIMIT 1", (kc_id,)
@@ -161,14 +169,31 @@ def get_random_question(kc_id):
     if not row:
         return None
     r = dict(row)
-    opts = {"a": r["opt_a"], "b": r["opt_b"], "c": r["opt_c"], "d": r["opt_d"]}
-    return {
-        "id":      r["id"],
-        "kc_id":   r["kc_id"],
-        "q":       r["question"],
-        "options": [r["opt_a"], r["opt_b"], r["opt_c"], r["opt_d"]],
-        "answer":  opts[r["answer"]],  # teks jawaban benar
-    }
+    qtype = r.get("question_type", "pilgan")
+
+    if qtype == "pilgan":
+        opts = {"a": r["opt_a"], "b": r["opt_b"], "c": r["opt_c"], "d": r["opt_d"]}
+        return {
+            "id": r["id"], "kc_id": r["kc_id"], "type": "pilgan",
+            "q": r["question"],
+            "options": [r["opt_a"], r["opt_b"], r["opt_c"], r["opt_d"]],
+            "answer": opts[r["answer"]],
+        }
+    elif qtype == "benar_salah":
+        return {
+            "id": r["id"], "kc_id": r["kc_id"], "type": "benar_salah",
+            "q": r["question"],
+            "options": ["Benar ✅", "Salah ❌"],
+            "answer": "Benar ✅" if r["answer"] == "benar" else "Salah ❌",
+        }
+    elif qtype == "isian":
+        return {
+            "id": r["id"], "kc_id": r["kc_id"], "type": "isian",
+            "q": r["question"],
+            "options": [],
+            "answer": r["answer"],
+        }
+    return None
 
 def count_questions(kc_id=None):
     with get_conn() as conn:
