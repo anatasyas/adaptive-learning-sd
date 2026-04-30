@@ -520,36 +520,48 @@ async function loadNextQuestion() {
   document.getElementById("options-wrap").innerHTML = "";
   document.getElementById("kc-name").textContent = "...";
 
-  const q = await api(`/api/next-question/${state.sid}`);
+  try {
+    const q = await api(`/api/next-question/${state.sid}`);
 
-  if (q.done) {
-    const s = await api(`/api/student/${state.sid}`);
-    document.getElementById("final-stars").textContent = s.total_stars;
-    show("done");
-    return;
+    if (!q || q.error) {
+      document.getElementById("question-text").textContent =
+        "Terjadi kesalahan: " + (q && q.error ? q.error : "Server error");
+      return;
+    }
+
+    if (q.done) {
+      const s = await api(`/api/student/${state.sid}`);
+      document.getElementById("final-stars").textContent = s.total_stars || 0;
+      show("done");
+      return;
+    }
+
+    state.currentKC     = q.kc_id;
+    state.currentAnswer = q.answer;
+
+    document.getElementById("kc-name").textContent      = "📚 " + (q.kc_name || q.kc_id);
+    document.getElementById("question-text").textContent = q.q || "Soal tidak tersedia";
+
+    // Render options
+    const wrap = document.getElementById("options-wrap");
+    (q.options || []).forEach((opt) => {
+      const btn = document.createElement("button");
+      btn.className = "option";
+      btn.textContent = opt;
+      btn.dataset.val = opt;
+      btn.addEventListener("click", () => selectAnswer(opt));
+      wrap.appendChild(btn);
+    });
+
+    // Update progress
+    const prog = await api(`/api/progress/${state.sid}`);
+    if (prog && !prog.error) updateProgress(prog);
+
+  } catch (err) {
+    document.getElementById("question-text").textContent =
+      "Gagal memuat soal. Coba refresh halaman. (" + err.message + ")";
+    console.error("loadNextQuestion error:", err);
   }
-
-  state.currentKC     = q.kc_id;
-  state.currentAnswer = q.answer;
-
-  document.getElementById("kc-name").textContent   = "📚 " + q.kc_name;
-  document.getElementById("question-text").textContent = q.q;
-
-  // Render options
-  const wrap = document.getElementById("options-wrap");
-  const colors = ["btn-sky","btn-coral","btn-grass","btn-purple"];
-  q.options.forEach((opt, i) => {
-    const btn = document.createElement("button");
-    btn.className = "option";
-    btn.textContent = opt;
-    btn.dataset.val = opt;
-    btn.addEventListener("click", () => selectAnswer(opt));
-    wrap.appendChild(btn);
-  });
-
-  // Update progress
-  const prog = await api(`/api/progress/${state.sid}`);
-  updateProgress(prog);
 }
 
 async function selectAnswer(chosen) {
