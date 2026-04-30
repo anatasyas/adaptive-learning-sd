@@ -42,7 +42,7 @@ if Path(PARAM_PATH).exists():
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 def _rebuild_student_model(student_id: str) -> StudentModel:
     """Rebuild StudentModel dari DB state."""
-    student = StudentModel(student_id=student_id)
+    student   = StudentModel(student_id=student_id)
     db_states = get_all_kc_states(student_id)
 
     for kc_id in G.nodes:
@@ -52,20 +52,25 @@ def _rebuild_student_model(student_id: str) -> StudentModel:
         if kc_id in estimated_params:
             params.update(estimated_params[kc_id])
 
-        if kc_id in db_states:
-            s = db_states[kc_id]
-            p_know = s["p_know"]
-            n_correct = s["n_correct"]
-            n_incorrect = s["n_incorrect"]
+        db = db_states.get(kc_id)
+        if db:
+            p_know      = float(db["p_know"])
+            n_correct   = int(db["n_correct"])
+            n_incorrect = int(db["n_incorrect"])
         else:
-            p_know = get_ontology_informed_prior(G, kc_id)
-            n_correct = n_incorrect = 0
+            p_know      = get_ontology_informed_prior(G, kc_id)
+            n_correct   = 0
+            n_incorrect = 0
 
         student.kc_states[kc_id] = KCState(
-            kc_id=kc_id, p_know=p_know,
-            p_transit=params["p_transit"], p_guess=params["p_guess"],
-            p_slip=params["p_slip"], mastery_threshold=params["mastery_threshold"],
-            n_correct=n_correct, n_incorrect=n_incorrect,
+            kc_id             = kc_id,
+            p_know            = p_know,
+            p_transit         = float(params["p_transit"]),
+            p_guess           = float(params["p_guess"]),
+            p_slip            = float(params["p_slip"]),
+            mastery_threshold = float(params["mastery_threshold"]),
+            n_correct         = n_correct,
+            n_incorrect       = n_incorrect,
         )
     return student
 
@@ -117,23 +122,24 @@ def index():
 
 @app.post("/api/register")
 def register():
-    data = request.json
-    name   = data.get("name", "Siswa").strip() or "Siswa"
-    avatar = int(data.get("avatar", 1))
-    sid    = f"S{random.randint(10000,99999)}"
+    try:
+        data = request.json
+        name   = data.get("name", "Siswa").strip() or "Siswa"
+        avatar = int(data.get("avatar", 1))
+        sid    = f"S{random.randint(10000,99999)}"
 
-    if get_student(sid):
-        return jsonify({"error": "ID collision"}), 500
+        create_student(sid, name, avatar)
 
-    create_student(sid, name, avatar)
+        for kc_id in G.nodes:
+            upsert_kc_state(sid, kc_id,
+                            get_ontology_informed_prior(G, kc_id),
+                            0, 0, False)
 
-    # Inisialisasi semua KC state
-    for kc_id in G.nodes:
-        upsert_kc_state(sid, kc_id,
-                        get_ontology_informed_prior(G, kc_id),
-                        0, 0, False)
-
-    return jsonify({"student_id": sid, "name": name})
+        return jsonify({"student_id": sid, "name": name})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 
 @app.get("/api/student/<sid>")
@@ -148,44 +154,53 @@ def student_info(sid):
 @app.get("/api/next-question/<sid>")
 def next_question(sid):
     """Pilih KC berikutnya via adaptive engine, kembalikan soal."""
-    student = _rebuild_student_model(sid)
-    next_kc = select_next_kc(student, G)
+    try:
+        student = _rebuild_student_model(sid)
+        next_kc = select_next_kc(student, G)
 
-    if next_kc is None:
-        return jsonify({"done": True, "message": "Semua materi selesai! 🎉"})
+        if next_kc is None:
+            return jsonify({"done": True, "message": "Semua materi selesai! 🎉"})
 
-    q = _get_question(next_kc)
-    return jsonify({"done": False, **q})
+        q = _get_question(next_kc)
+        return jsonify({"done": False, **q})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 
 @app.post("/api/answer/<sid>")
 def answer(sid):
     """Proses jawaban siswa, update BKT state, simpan ke DB."""
-    data    = request.json
-    kc_id   = data["kc_id"]
-    correct = bool(data["correct"])
+    try:
+        data    = request.json
+        kc_id   = data["kc_id"]
+        correct = bool(data["correct"])
 
-    student = _rebuild_student_model(sid)
-    result  = process_response(student, G, kc_id, correct)
-    _sync_to_db(student)
-    log_interaction(sid, kc_id, correct, result["p_before"], result["p_after"])
+        student = _rebuild_student_model(sid)
+        result  = process_response(student, G, kc_id, correct)
+        _sync_to_db(student)
+        log_interaction(sid, kc_id, correct, result["p_before"], result["p_after"])
 
-    # Beri bintang
-    stars_earned = 0
-    if correct:
-        stars_earned = 2 if result["mastered"] else 1
-        add_stars(sid, stars_earned)
+        stars_earned = 0
+        if correct:
+            stars_earned = 2 if result["mastered"] else 1
+            add_stars(sid, stars_earned)
 
-    progress = _progress_summary(sid)
+        progress = _progress_summary(sid)
 
-    return jsonify({
-        "correct":      correct,
-        "mastered":     result["mastered"],
-        "p_know":       round(result["p_after"], 3),
-        "propagated":   result["propagated"],
-        "stars_earned": stars_earned,
-        "progress":     progress,
-    })
+        return jsonify({
+            "correct":      correct,
+            "mastered":     result["mastered"],
+            "p_know":       round(result["p_after"], 3),
+            "propagated":   result["propagated"],
+            "stars_earned": stars_earned,
+            "progress":     progress,
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
 
 
 @app.get("/api/progress/<sid>")
