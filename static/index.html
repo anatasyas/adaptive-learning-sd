@@ -291,6 +291,44 @@ async function loadNextQuestion(){
   }
 }
 
+
+
+function showFeedback(correct, res) {
+  const msgs=correct?CORRECT_MSG:WRONG_MSG;
+  const [title,sub]=msgs[Math.floor(Math.random()*msgs.length)];
+  let extra=(res&&res.stars_earned>0)?`<br><span class="star-anim" style="font-size:1.1rem;display:inline-block;margin-top:4px">+${res.stars_earned} ⭐</span>`:"";
+  const fb=document.getElementById("feedback");
+  document.getElementById("feedback-emoji").textContent=correct?"🌟":"💡";
+  document.getElementById("feedback-text").innerHTML=`<strong>${title}</strong><br><span style="font-size:.88rem;font-weight:600">${sub}</span>${extra}`;
+  fb.className="feedback show "+(correct?"good":"bad");
+  if(res&&res.mastered)showToast("🎊 Materi dikuasai!");
+  if(res&&res.progress)updateProgress(res.progress);
+}
+
+async function selectAnswerIsian(userVal, correctAnswer) {
+  if (state.answered) return;
+  state.answered = true;
+
+  const inp = document.getElementById("isian-inp");
+  const btn = document.getElementById("isian-btn");
+  if (inp) inp.disabled = true;
+  if (btn) btn.disabled = true;
+
+  const correct = userVal.trim() === String(correctAnswer).trim();
+  if (inp) inp.classList.add(correct ? "correct" : "wrong");
+
+  try {
+    const res = await api(`/api/answer/${state.sid}`, "POST", {
+      kc_id: state.currentKC,
+      user_answer: userVal,
+      correct_answer: String(correctAnswer),
+    });
+    showFeedback(correct, res);
+  } catch(e) { console.error(e); }
+
+  document.getElementById("btn-next").style.display = "block";
+}
+
 async function selectAnswer(chosen){
   if(state.answered)return;
   state.answered=true;
