@@ -81,6 +81,47 @@ body{font-family:'Nunito',sans-serif;background:linear-gradient(160deg,#E3F2FD 0
 .hitung-hint{font-size:0.78rem;color:#78909C;font-weight:600;text-align:center;margin-bottom:8px;}
 /* ── VISUAL PILGAN ── */
 .visual-display{background:linear-gradient(135deg,#E3F2FD,#FFF9C4);border-radius:18px;padding:18px;text-align:center;margin-bottom:14px;border:3px solid #BBDEFB;font-size:2rem;line-height:1.6;min-height:80px;display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:6px;}
+
+/* ── Number Pad ──────────────────────────────────────────────────────────── */
+.numpad-wrap{display:flex;flex-direction:column;align-items:center;gap:12px;margin-top:4px;}
+.numpad-display{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  background:#F3F4F6;border-radius:18px;padding:12px 24px;
+  min-width:160px;border:3px solid #E0E0E0;
+}
+.numpad-answer{
+  font-size:2.8rem;font-weight:900;color:var(--ink);
+  min-width:60px;text-align:center;letter-spacing:2px;
+}
+.numpad-answer.has-val{color:#1976D2;}
+.numpad-clear{
+  background:none;border:none;font-size:1.4rem;cursor:pointer;
+  padding:4px 8px;border-radius:8px;color:#90A4AE;
+}
+.numpad-clear:hover{background:#FBE9E7;color:var(--coral);}
+.numpad-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);
+  gap:10px;width:100%;max-width:280px;
+}
+.numpad-btn{
+  padding:16px 8px;font-size:1.6rem;font-family:'Nunito',sans-serif;
+  font-weight:900;border:3px solid #E0E0E0;border-radius:16px;
+  background:white;cursor:pointer;text-align:center;
+  transition:all .12s;color:var(--ink);
+  box-shadow:0 5px 0 #E0E0E0;
+}
+.numpad-btn:active{transform:translateY(4px);box-shadow:0 2px 0 #E0E0E0;}
+.numpad-btn:hover{border-color:var(--sky);background:#E3F2FD;box-shadow:0 5px 0 #B3E5FC;}
+.numpad-btn.zero{grid-column:span 2;}
+.numpad-submit-row{width:100%;max-width:280px;}
+.numpad-submit{
+  width:100%;padding:15px;font-size:1.05rem;font-family:'Nunito',sans-serif;
+  font-weight:800;background:var(--coral);color:white;border:none;
+  border-radius:14px;cursor:pointer;box-shadow:0 5px 0 #E64A19;
+  transition:all .15s;
+}
+.numpad-submit:active{transform:translateY(4px);box-shadow:0 2px 0 #E64A19;}
+.numpad-submit:disabled{background:#B0BEC5;box-shadow:0 5px 0 #90A4AE;cursor:default;}
 /* ── Feedback ── */
 .feedback{border-radius:14px;padding:12px 16px;text-align:center;font-weight:800;font-size:0.95rem;margin-top:14px;display:none;}
 .feedback.show{display:block;animation:slideUp .3s ease;}
@@ -314,26 +355,57 @@ function renderQuestionBody(q){
     wrap.appendChild(grid);
 
   } else if(type==="isian"){
-    const div=document.createElement("div");
-    div.className="isian-wrap";
-    const hint=document.createElement("div");
-    hint.className="isian-hint";hint.textContent="Ketik jawabanmu di bawah ini, lalu tekan Jawab!";
-    const inp=document.createElement("input");
-    inp.type="text";inp.inputMode="numeric";inp.pattern="[0-9]*";
-    inp.className="isian-input";inp.placeholder="?";inp.id="isian-inp";
-    inp.autocomplete="off";
-    const sbmt=document.createElement("button");
-    sbmt.className="isian-submit";sbmt.textContent="✓ Jawab";sbmt.id="isian-btn";
-    sbmt.addEventListener("click",()=>{
-      const val=inp.value.trim();
-      if(!val){inp.focus();return;}
-      inp.disabled=true;sbmt.disabled=true;
-      submitAnswer(val,q);
+    let numVal="";
+    const wrap2=document.createElement("div");wrap2.className="numpad-wrap";
+    // Display
+    const disp=document.createElement("div");disp.className="numpad-display";
+    const ans=document.createElement("span");ans.className="numpad-answer";ans.textContent="?";ans.id="numpad-ans";
+    const clr=document.createElement("button");clr.className="numpad-clear";clr.textContent="⌫";clr.title="Hapus";
+    clr.addEventListener("click",()=>{
+      numVal=numVal.slice(0,-1);
+      ans.textContent=numVal||"?";
+      ans.className="numpad-answer"+(numVal?" has-val":"");
+      sbmt.disabled=!numVal;
     });
-    inp.addEventListener("keydown",e=>{if(e.key==="Enter")sbmt.click();});
-    div.appendChild(hint);div.appendChild(inp);div.appendChild(sbmt);
-    wrap.appendChild(div);
-    setTimeout(()=>inp.focus(),150);
+    disp.appendChild(ans);disp.appendChild(clr);
+    wrap2.appendChild(disp);
+    // Grid
+    const grid=document.createElement("div");grid.className="numpad-grid";
+    [1,2,3,4,5,6,7,8,9].forEach(n=>{
+      const btn=document.createElement("button");
+      btn.className="numpad-btn";btn.textContent=n;
+      btn.addEventListener("click",()=>{
+        if(numVal.length>=2)return;
+        numVal+=String(n);
+        ans.textContent=numVal;ans.className="numpad-answer has-val";
+        sbmt.disabled=false;
+      });
+      grid.appendChild(btn);
+    });
+    // 0 button (spans 2 cols)
+    const btn0=document.createElement("button");
+    btn0.className="numpad-btn zero";btn0.textContent="0";
+    btn0.addEventListener("click",()=>{
+      if(!numVal||numVal.length>=2)return;
+      numVal+="0";
+      ans.textContent=numVal;ans.className="numpad-answer has-val";
+      sbmt.disabled=false;
+    });
+    grid.appendChild(btn0);
+    wrap2.appendChild(grid);
+    // Submit
+    const submitRow=document.createElement("div");submitRow.className="numpad-submit-row";
+    const sbmt=document.createElement("button");
+    sbmt.className="numpad-submit";sbmt.textContent="✓ Jawab!";sbmt.disabled=true;
+    sbmt.addEventListener("click",()=>{
+      if(!numVal||state.answered)return;
+      sbmt.disabled=true;clr.disabled=true;
+      document.querySelectorAll(".numpad-btn").forEach(b=>b.disabled=true);
+      submitAnswer(numVal,q);
+    });
+    submitRow.appendChild(sbmt);
+    wrap2.appendChild(submitRow);
+    wrap.appendChild(wrap2);
 
   } else if(type==="hitung"){
     const hint=document.createElement("div");
@@ -420,8 +492,11 @@ async function submitAnswer(userVal, q){
       else if(v===String(userVal).trim().toLowerCase()&&!correct)btn.classList.add("wrong");
     });
   } else if(type==="isian"){
-    const inp=document.getElementById("isian-inp");
-    if(inp){inp.classList.add(correct?"correct":"wrong");}
+    const ans=document.getElementById("numpad-ans");
+    if(ans){
+      ans.style.color=correct?"#388E3C":"#E64A19";
+      ans.style.fontSize="2.8rem";
+    }
   } else if(type==="hitung"){
     const disp=document.getElementById("hitung-disp");
     if(disp){disp.style.color=correct?"#388E3C":"#E64A19";}
