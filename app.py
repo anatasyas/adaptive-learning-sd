@@ -313,25 +313,38 @@ def admin_stats():
     if not _auth(request):
         return jsonify({"error": "Unauthorized"}), 401
     with get_conn() as conn:
-        n_s   = conn.execute("SELECT COUNT(*) FROM students").fetchone()[0]
-        n_i   = conn.execute("SELECT COUNT(*) FROM interactions").fetchone()[0]
-        n_m   = conn.execute("SELECT COUNT(*) FROM kc_states WHERE is_mastered=1").fetchone()[0]
-        acc   = conn.execute("SELECT AVG(correct) FROM interactions").fetchone()[0]
-        rows  = conn.execute("""
+        n_s = conn.execute("SELECT COUNT(*) FROM students").fetchone()[0]
+        n_i = conn.execute("SELECT COUNT(*) FROM interactions").fetchone()[0]
+        n_m = conn.execute("SELECT COUNT(*) FROM kc_states WHERE is_mastered=1").fetchone()[0]
+        acc = conn.execute("SELECT AVG(correct) FROM interactions").fetchone()[0]
+        # Pisahkan subquery agar tidak terjadi row multiplication
+        rows = conn.execute("""
             SELECT s.name,
-                   COUNT(i.id) as n_inter,
-                   ROUND(AVG(i.correct)*100,1) as acc,
-                   COUNT(DISTINCT CASE WHEN ks.is_mastered=1 THEN ks.kc_id END) as mastered
+                   s.total_stars,
+                   COALESCE(i.n_inter, 0)   as n_inter,
+                   COALESCE(i.acc, 0)       as acc,
+                   COALESCE(ks.mastered, 0) as mastered
             FROM students s
-            LEFT JOIN interactions i  ON i.student_id=s.id
-            LEFT JOIN kc_states ks    ON ks.student_id=s.id
-            GROUP BY s.id ORDER BY s.created_at
+            LEFT JOIN (
+                SELECT student_id,
+                       COUNT(*)             as n_inter,
+                       ROUND(AVG(correct)*100, 1) as acc
+                FROM interactions
+                GROUP BY student_id
+            ) i  ON i.student_id = s.id
+            LEFT JOIN (
+                SELECT student_id,
+                       COUNT(*) as mastered
+                FROM kc_states WHERE is_mastered=1
+                GROUP BY student_id
+            ) ks ON ks.student_id = s.id
+            ORDER BY s.created_at
         """).fetchall()
     return jsonify({
         "total_students":     n_s,
         "total_interactions": n_i,
         "total_kc_mastered":  n_m,
-        "avg_accuracy_pct":   round((acc or 0)*100, 1),
+        "avg_accuracy_pct":   round((acc or 0) * 100, 1),
         "students":           [dict(r) for r in rows],
     })
 
