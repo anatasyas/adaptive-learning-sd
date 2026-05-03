@@ -272,12 +272,11 @@ def seed():
         rows = conn.execute(
             "SELECT kc_id, COUNT(*) as n FROM questions GROUP BY kc_id ORDER BY kc_id"
         ).fetchall()
+        rows2 = conn.execute(
+            "SELECT question_type, COUNT(*) as n FROM questions GROUP BY question_type"
+        ).fetchall()
     for row in rows:
         print(f"  {row['kc_id']}: {row['n']} soal")
-    # Ringkasan per tipe
-    rows2 = conn.execute(
-        "SELECT question_type, COUNT(*) as n FROM questions GROUP BY question_type"
-    ).fetchall()
     print("\nPer tipe:")
     for row in rows2:
         print(f"  {row['question_type']}: {row['n']} soal")
