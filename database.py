@@ -179,18 +179,34 @@ def get_random_question(kc_id):
             "options": [r["opt_a"], r["opt_b"], r["opt_c"], r["opt_d"]],
             "answer": opts[r["answer"]],
         }
-    elif qtype == "benar_salah":
-        return {
-            "id": r["id"], "kc_id": r["kc_id"], "type": "benar_salah",
-            "q": r["question"],
-            "options": ["Benar ✅", "Salah ❌"],
-            "answer": "Benar ✅" if r["answer"] == "benar" else "Salah ❌",
-        }
     elif qtype == "isian":
         return {
             "id": r["id"], "kc_id": r["kc_id"], "type": "isian",
             "q": r["question"],
             "options": [],
+            "answer": r["answer"],
+        }
+    elif qtype == "hitung":
+        # opt_a = emoji objek, opt_b = jumlah objek, answer = angka benar
+        return {
+            "id": r["id"], "kc_id": r["kc_id"], "type": "hitung",
+            "q": r["question"],
+            "emoji": r["opt_a"],
+            "count": int(r["opt_b"]),
+            "options": [],
+            "answer": r["answer"],
+        }
+    elif qtype == "visual_pilgan":
+        # opt_a = emoji, opt_b = jumlah visual, opt_c/d = opsi tambahan
+        opts = {"a": r["opt_a"], "b": r["opt_b"], "c": r["opt_c"], "d": r["opt_d"]}
+        return {
+            "id": r["id"], "kc_id": r["kc_id"], "type": "visual_pilgan",
+            "q": r["question"],
+            "emoji": r["opt_a"],
+            "count": int(r["opt_b"]),
+            "options": [r["opt_c"], r["opt_d"],
+                        str(int(r["opt_b"])),
+                        str(int(r["opt_b"]) + 2)],
             "answer": r["answer"],
         }
     return None
