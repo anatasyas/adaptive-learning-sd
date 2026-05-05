@@ -171,44 +171,93 @@ def get_random_question(kc_id):
     r = dict(row)
     qtype = r.get("question_type", "pilgan")
 
+    base = {"id": r["id"], "kc_id": r["kc_id"], "type": qtype, "q": r["question"]}
+
     if qtype == "pilgan":
         opts = {"a": r["opt_a"], "b": r["opt_b"], "c": r["opt_c"], "d": r["opt_d"]}
-        return {
-            "id": r["id"], "kc_id": r["kc_id"], "type": "pilgan",
-            "q": r["question"],
-            "options": [r["opt_a"], r["opt_b"], r["opt_c"], r["opt_d"]],
-            "answer": opts[r["answer"]],
-        }
+        return {**base,
+                "options": [r["opt_a"], r["opt_b"], r["opt_c"], r["opt_d"]],
+                "answer":  opts[r["answer"]]}
+
     elif qtype == "isian":
-        return {
-            "id": r["id"], "kc_id": r["kc_id"], "type": "isian",
-            "q": r["question"],
-            "options": [],
-            "answer": r["answer"],
-        }
+        return {**base, "options": [], "answer": r["answer"]}
+
     elif qtype == "hitung":
-        # opt_a = emoji objek, opt_b = jumlah objek, answer = angka benar
-        return {
-            "id": r["id"], "kc_id": r["kc_id"], "type": "hitung",
-            "q": r["question"],
-            "emoji": r["opt_a"],
-            "count": int(r["opt_b"]),
-            "options": [],
-            "answer": r["answer"],
-        }
+        # opt_a=emoji, opt_b=jumlah
+        return {**base, "emoji": r["opt_a"], "count": int(r["opt_b"]),
+                "options": [], "answer": r["answer"]}
+
     elif qtype == "visual_pilgan":
-        # opt_a = emoji, opt_b = jumlah visual, opt_c/d = opsi tambahan
+        # opt_a=emoji, opt_b=jumlah, opt_c/d=opsi salah
+        correct = str(r["answer"])
+        wrongs  = [r["opt_c"], r["opt_d"]]
+        opts    = list(dict.fromkeys([correct] + wrongs))[:4]
+        import random; random.shuffle(opts)
+        return {**base, "emoji": r["opt_a"], "count": int(r["opt_b"]),
+                "options": opts, "answer": correct}
+
+    elif qtype == "jodohkan":
+        # opt_a=emoji, opt_b=jumlah benar, opt_c/d=angka salah
+        correct = str(r["opt_b"])
+        import random
+        wrongs  = [r["opt_c"], r["opt_d"], str(int(r["opt_b"])+3)]
+        opts    = list(dict.fromkeys([correct] + wrongs))[:4]
+        random.shuffle(opts)
+        return {**base, "emoji": r["opt_a"], "count": int(r["opt_b"]),
+                "options": opts, "answer": correct}
+
+    elif qtype == "hitung_warna":
+        # opt_a=string emoji campur, opt_b=emoji target yang dihitung
+        return {**base, "emoji_box": r["opt_a"], "target": r["opt_b"],
+                "options": [], "answer": r["answer"]}
+
+    elif qtype == "visual_tambah":
+        # opt_a=emoji1, opt_b=jml1, opt_c=emoji2, opt_d=jml2, answer=total
+        return {**base,
+                "emoji1": r["opt_a"], "count1": int(r["opt_b"]),
+                "emoji2": r["opt_c"], "count2": int(r["opt_d"]),
+                "options": [], "answer": r["answer"]}
+
+    return None
+    r = dict(row)
+    qtype = r.get("question_type", "pilgan")
+
+    if qtype == "pilgan":
         opts = {"a": r["opt_a"], "b": r["opt_b"], "c": r["opt_c"], "d": r["opt_d"]}
-        return {
-            "id": r["id"], "kc_id": r["kc_id"], "type": "visual_pilgan",
-            "q": r["question"],
-            "emoji": r["opt_a"],
-            "count": int(r["opt_b"]),
-            "options": [r["opt_c"], r["opt_d"],
-                        str(int(r["opt_b"])),
-                        str(int(r["opt_b"]) + 2)],
-            "answer": r["answer"],
-        }
+        return {"id":r["id"],"kc_id":r["kc_id"],"type":"pilgan","q":r["question"],
+                "options":[r["opt_a"],r["opt_b"],r["opt_c"],r["opt_d"]],"answer":opts[r["answer"]]}
+
+    elif qtype == "isian":
+        return {"id":r["id"],"kc_id":r["kc_id"],"type":"isian","q":r["question"],
+                "options":[],"answer":r["answer"]}
+
+    elif qtype == "hitung":
+        return {"id":r["id"],"kc_id":r["kc_id"],"type":"hitung","q":r["question"],
+                "emoji":r["opt_a"],"count":int(r["opt_b"]),"options":[],"answer":r["answer"]}
+
+    elif qtype == "visual_pilgan":
+        opts = [r["opt_c"], r["opt_d"], str(int(r["opt_b"])), str(int(r["opt_b"])+2)]
+        random.shuffle(opts)
+        return {"id":r["id"],"kc_id":r["kc_id"],"type":"visual_pilgan","q":r["question"],
+                "emoji":r["opt_a"],"count":int(r["opt_b"]),"options":opts,"answer":r["answer"]}
+
+    elif qtype == "jodohkan":
+        correct = str(r["opt_b"])
+        opts = list({correct, r["opt_c"], r["opt_d"], str(int(r["opt_b"])+3)})
+        while len(opts) < 4: opts.append(str(int(correct)+len(opts)))
+        random.shuffle(opts)
+        return {"id":r["id"],"kc_id":r["kc_id"],"type":"jodohkan","q":r["question"],
+                "emoji":r["opt_a"],"count":int(r["opt_b"]),"options":opts[:4],"answer":correct}
+
+    elif qtype == "hitung_warna":
+        return {"id":r["id"],"kc_id":r["kc_id"],"type":"hitung_warna","q":r["question"],
+                "emojis":r["opt_a"],"target":r["opt_b"],"options":[],"answer":r["answer"]}
+
+    elif qtype == "visual_tambah":
+        return {"id":r["id"],"kc_id":r["kc_id"],"type":"visual_tambah","q":r["question"],
+                "emoji1":r["opt_a"],"count1":int(r["opt_b"]),
+                "emoji2":r["opt_c"],"count2":int(r["opt_d"]),"options":[],"answer":r["answer"]}
+
     return None
 
 def count_questions(kc_id=None):
