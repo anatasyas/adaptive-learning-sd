@@ -1,12 +1,6 @@
 """
-BKT Engine — Bayesian Knowledge Tracing + Ontologi Integration
-Referensi: Corbett & Anderson (1995)
+BKT + Ontologi Integration
 
-Integrasi ontologi di 4 titik:
-  1. P(L0) per KC dari ontologi (bukan flat default)
-  2. P(T) per KC dari ontologi (integrasi baru)
-  3. Mastery propagation: KC mastered -> boost prior KC dependennya
-  4. Adaptive selection: learning-gain-aware KC selection
 """
 
 from dataclasses import dataclass, field
@@ -208,8 +202,6 @@ def select_next_kc(student: StudentModel, G: nx.DiGraph) -> Optional[str]:
     Mengkombinasikan informasi dari BKT (P(L), P(T)) dengan
     informasi dari ontologi (n_dependents) dalam satu metrik.
     KC dengan ELG tertinggi diprioritaskan.
-
-    Acuan: konsep serupa pada curriculum sequencing (Doroudi et al. 2019).
     """
     mastered  = student.mastered_set()
     available = get_available_kcs(G, mastered)
