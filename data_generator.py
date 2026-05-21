@@ -1,14 +1,7 @@
 """
 Synthetic Data Generator — BKT Generative Process
-Acuan: Corbett & Anderson (1995), Baker et al. (2008), Yudelson et al. (2013)
 
-Data di-generate dari generative process BKT (Hidden Markov Model),
-bukan random. Setiap respons punya kausalitas dari hidden knowledge state.
-
-Output: CSV dengan kolom:
-  student_id, kc_id, opportunity, correct, true_knowledge_state
-  (true_knowledge_state hanya untuk evaluasi / parameter recovery — 
-   tidak dipakai oleh BKT engine saat inferensi)
+Generated data by Hidden Markov Model
 """
 
 import json
