@@ -1,268 +1,132 @@
 """
-Adaptive Engine + Evaluator
-Membandingkan: BKT+Ontologi vs BKT Baseline (tanpa ontologi)
+evaluator.py — BKT+Ontologi vs Sequential Baseline
 
-Metrik:
-  Level 1 (prediksi) : AUC-ROC, RMSE, Accuracy
-  Level 2 (ontologi) : avg attempts to mastery, path validity,
-                       parameter recovery RMSE, % students completed
+Sequential Baseline merepresentasikan pembelajaran konvensional:
+  - Urutan KC tetap (B01 → B02 → ... → A02), sama untuk semua siswa
+  - Prediksi P(benar) = rata-rata akurasi KC dari data latih (empirical mean)
+  - Tidak ada pembaruan knowledge state per siswa
+  - Tidak ada pengecekan prasyarat
+
+Metrik yang digunakan:
+  Prediksi   : AUC-ROC, RMSE, Akurasi (one-step-ahead)
+  Kurikulum  : Param Recovery RMSE P(L₀), Path Validity
 """
 
-import csv
-import json
-import math
-import random
+import csv, json, math, random, os
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional
-
 import networkx as nx
 
 from ontology import (
-    build_ontology,
-    get_available_kcs,
-    get_kc_info,
-    get_ontology_informed_prior,
-    get_prerequisites,
+    build_ontology, get_available_kcs,
+    get_ontology_informed_prior, get_prerequisites,
 )
 from bkt_engine import (
     StudentModel, KCState,
-    bkt_update, init_student, process_response,
-    select_next_kc, DEFAULT_BKT_PARAMS, KC_PARAM_OVERRIDES,
+    init_student, process_response,
+    select_next_kc, DEFAULT_BKT_PARAMS,
 )
 
-
-# ─── 0. Load Estimated Parameters ────────────────────────────────────────────
-def load_estimated_params(path: str = "data/estimated_params.json") -> dict:
-    """
-    Load hasil estimasi dari param_estimator.py.
-    Jika belum ada, kembalikan dict kosong (fallback ke default).
-    """
-    p = Path(path)
-    if not p.exists():
-        print(f"  [WARN] {path} not found — using default params. "
-              "Run param_estimator.py first for better results.")
-        return {"ontologi": {}, "baseline": {}}
-    with open(p, encoding="utf-8") as f:
-        return json.load(f)
-
-
-def _resolve_params(kc_id: str, estimated: dict) -> dict:
-    """Ambil estimated params jika ada, fallback ke DEFAULT_BKT_PARAMS."""
-    if kc_id in estimated:
-        return {
-            "p_transit": estimated[kc_id]["p_transit"],
-            "p_guess":   estimated[kc_id]["p_guess"],
-            "p_slip":    estimated[kc_id]["p_slip"],
-            "mastery_threshold": DEFAULT_BKT_PARAMS["mastery_threshold"],
-        }
-    params = dict(DEFAULT_BKT_PARAMS)
-    if kc_id in KC_PARAM_OVERRIDES:
-        params.update(KC_PARAM_OVERRIDES[kc_id])
-    return params
-
-
-# ─── 1. Baseline Model ────────────────────────────────────────────────────────
 FLAT_PRIOR = 0.35
 
-def init_student_baseline(
-    student_id: str,
-    G: nx.DiGraph,
-    estimated_params: dict = None,
-) -> StudentModel:
-    """BKT Baseline: flat P(L0), tanpa info ontologi."""
-    student = StudentModel(student_id=student_id)
-    est     = estimated_params or {}
-    for kc_id in G.nodes:
-        params = _resolve_params(kc_id, est)
-        student.kc_states[kc_id] = KCState(
-            kc_id             = kc_id,
-            p_know            = FLAT_PRIOR,
-            p_transit         = params["p_transit"],
-            p_guess           = params["p_guess"],
-            p_slip            = params["p_slip"],
-            mastery_threshold = params["mastery_threshold"],
-        )
-    return student
+
+# ── Sequential Baseline ───────────────────────────────────────────────────────
+def build_seq_predictor(train_csv: str) -> dict[str, float]:
+    """Hitung rata-rata akurasi per KC dari data latih sebagai predictor."""
+    acc_sum   = defaultdict(float)
+    acc_count = defaultdict(int)
+    with open(train_csv, encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            acc_sum[row["kc_id"]]   += int(row["correct"])
+            acc_count[row["kc_id"]] += 1
+    return {
+        kc: acc_sum[kc] / acc_count[kc]
+        for kc in acc_sum if acc_count[kc] > 0
+    }
 
 
-def select_next_kc_baseline(
-    student: StudentModel,
-    G: nx.DiGraph,
-    kc_order: list[str],  # urutan random yang di-fix saat init siswa
-) -> Optional[str]:
+def fixed_kc_order(G: nx.DiGraph) -> list[str]:
     """
-    Baseline KC selection: urutan random (di-fix per siswa, tapi acak).
-    Tidak ada prerequisite check — ini yang membedakan dari ontologi.
+    Urutan KC tetap: topological sort (ikuti prasyarat),
+    merepresentasikan urutan buku/kurikulum konvensional.
     """
-    for kc_id in kc_order:
-        if not student.kc_states[kc_id].is_mastered:
-            return kc_id
-    return None
+    try:
+        return list(nx.topological_sort(G))
+    except nx.NetworkXUnfeasible:
+        return list(G.nodes)
 
 
-# ─── 2. Load Dataset ──────────────────────────────────────────────────────────
+# ── Load Dataset ──────────────────────────────────────────────────────────────
 def load_dataset(csv_path: str) -> list[dict]:
     rows = []
     with open(csv_path, encoding="utf-8") as f:
         for row in csv.DictReader(f):
             rows.append({
-                "student_id":           row["student_id"],
-                "kc_id":                row["kc_id"],
-                "opportunity":          int(row["opportunity"]),
-                "correct":              int(row["correct"]),
-                "true_knowledge_state": int(row["true_knowledge_state"]),
-                "true_p0":              float(row["true_p0"]),
-                "true_pT":              float(row["true_pT"]),
-                "true_pG":              float(row["true_pG"]),
-                "true_pS":              float(row["true_pS"]),
+                "student_id": row["student_id"],
+                "kc_id":      row["kc_id"],
+                "opportunity":int(row["opportunity"]),
+                "correct":    int(row["correct"]),
+                "true_p0":    float(row.get("true_p0", FLAT_PRIOR)),
             })
     return rows
 
 
 def group_by_student(rows: list[dict]) -> dict[str, list[dict]]:
-    groups = defaultdict(list)
-    for row in rows:
-        groups[row["student_id"]].append(row)
-    return dict(groups)
+    g = defaultdict(list)
+    for r in rows:
+        g[r["student_id"]].append(r)
+    return dict(g)
 
 
-# ─── 3. Replay — untuk metrik prediksi (Level 1) ─────────────────────────────
-def replay_student(
-    student_rows: list[dict],
-    G: nx.DiGraph,
-    use_ontology: bool,
-    est_params: dict = None,
-) -> list[dict]:
-    """
-    Replay interaksi dari dataset. Catat P(correct) sebelum update
-    (one-step-ahead prediction). Standar evaluasi BKT — Baker et al. (2008).
-    """
-    student_id = student_rows[0]["student_id"]
-    student = (init_student(student_id, G) if use_ontology
-               else init_student_baseline(student_id, G, est_params))
+def load_estimated_params(path: str = "data/estimated_params.json") -> dict:
+    p = Path(path)
+    if not p.exists():
+        return {"ontologi": {}}
+    with open(p, encoding="utf-8") as f:
+        return json.load(f)
 
-    predictions = []
+
+# ── Metrik Prediksi ───────────────────────────────────────────────────────────
+def replay_bkt(student_rows: list[dict], G: nx.DiGraph,
+               est_params: dict) -> list[dict]:
+    """BKT+Ontologi: one-step-ahead prediction dengan update setiap langkah."""
+    sid     = student_rows[0]["student_id"]
+    student = init_student(sid, G, est_params)
+    preds   = []
     for row in student_rows:
-        kc_id   = row["kc_id"]
-        state   = student.kc_states[kc_id]
+        kc_id = row["kc_id"]
+        state = student.kc_states[kc_id]
         pL, pG, pS = state.p_know, state.p_guess, state.p_slip
-
-        # Prediksi sebelum update
-        p_pred = pL * (1 - pS) + (1 - pL) * pG
-        predictions.append({
+        preds.append({
             "actual":    row["correct"],
-            "predicted": p_pred,
+            "predicted": pL * (1 - pS) + (1 - pL) * pG,
         })
-
         process_response(student, G, kc_id, bool(row["correct"]))
+    return preds
 
-    return predictions
 
-
-# ─── 4. Simulate Adaptive Session — untuk metrik ontologi (Level 2) ──────────
-def simulate_adaptive_session(
-    student_id: str,
-    G: nx.DiGraph,
-    use_ontology: bool,
-    question_bank: dict[str, list[int]],
-    rng: random.Random,
-    max_questions: int = 1000,
-    est_params: dict = None,
-) -> dict:
+def replay_sequential(student_rows: list[dict],
+                      kc_mean: dict[str, float],
+                      global_mean: float) -> list[dict]:
     """
-    Simulasi sesi adaptive dari awal sampai semua KC mastered atau habis quota.
+    Sequential Baseline: prediksi = rata-rata akurasi KC dari training.
+    Tidak ada update per siswa — sama untuk semua siswa.
     """
-    student    = (init_student(student_id, G) if use_ontology
-                  else init_student_baseline(student_id, G, est_params))
-
-    # Baseline pakai urutan KC random yang di-fix untuk siswa ini
-    # Ini yang membuat baseline benar-benar tidak prerequisite-aware
-    kc_order_baseline = list(G.nodes)
-    rng.shuffle(kc_order_baseline)
-
-    total_q    = 0
-    mastered   = set()
-    path_log   = []
-    valid_steps = 0
-
-    for _ in range(max_questions):
-        # KC selection
-        if use_ontology:
-            next_kc = select_next_kc(student, G)
-        else:
-            next_kc = select_next_kc_baseline(student, G, kc_order_baseline)
-
-        if next_kc is None:
-            break
-
-        # Cek validitas step ini secara ontologi (untuk kedua model)
-        prereqs = get_prerequisites(G, next_kc)
-        if all(p in mastered for p in prereqs):
-            valid_steps += 1
-
-        path_log.append(next_kc)
-
-        # Ambil respons dari question_bank
-        pool    = question_bank.get(next_kc, [0, 1])
-        correct = rng.choice(pool)
-
-        result  = process_response(student, G, next_kc, bool(correct))
-        total_q += 1
-
-        if result["mastered"] and next_kc not in mastered:
-            mastered.add(next_kc)
-
-    n_total       = G.number_of_nodes()
-    path_validity = valid_steps / len(path_log) if path_log else 0
-
-    return {
-        "student_id":          student_id,
-        "n_mastered":          len(mastered),
-        "n_total":             n_total,
-        "completed":           len(mastered) == n_total,
-        "pct_kcs_mastered":    round(len(mastered) / n_total * 100, 1),
-        "total_questions":     total_q,
-        "avg_attempts_per_kc": round(total_q / max(len(mastered), 1), 2),
-        "path_validity":       round(path_validity, 4),
-    }
+    return [
+        {
+            "actual":    row["correct"],
+            "predicted": kc_mean.get(row["kc_id"], global_mean),
+        }
+        for row in student_rows
+    ]
 
 
-# ─── 5. Parameter Recovery ────────────────────────────────────────────────────
-def compute_parameter_recovery(
-    rows_by_student: dict[str, list[dict]],
-    G: nx.DiGraph,
-    use_ontology: bool,
-) -> float:
-    """
-    RMSE antara P(L0) yang diestimasi sistem vs true P(L0) dari data sintetis.
-    Hanya bisa dihitung karena ground truth tersedia di data sintetis.
-    """
-    errors = []
-    for student_rows in rows_by_student.values():
-        student_id = student_rows[0]["student_id"]
-        student    = (init_student(student_id, G) if use_ontology
-                      else init_student_baseline(student_id, G))
-        seen = set()
-        for row in student_rows:
-            kc_id = row["kc_id"]
-            if kc_id not in seen:
-                est_p0  = student.kc_states[kc_id].p_know
-                true_p0 = row["true_p0"]
-                errors.append((est_p0 - true_p0) ** 2)
-                seen.add(kc_id)
-            process_response(student, G, kc_id, bool(row["correct"]))
-
-    return round(math.sqrt(sum(errors) / len(errors)), 4) if errors else 0.0
-
-
-# ─── 6. Prediction Metrics ────────────────────────────────────────────────────
-def compute_auc_roc(predictions: list[dict]) -> float:
-    actual, predicted = [p["actual"] for p in predictions], [p["predicted"] for p in predictions]
+def compute_auc_roc(preds: list[dict]) -> float:
+    actual    = [p["actual"]    for p in preds]
+    predicted = [p["predicted"] for p in preds]
     n_pos = sum(actual); n_neg = len(actual) - n_pos
     if n_pos == 0 or n_neg == 0:
         return 0.5
-
     thresholds = sorted(set(predicted), reverse=True)
     tpr_list, fpr_list = [0.0], [0.0]
     for t in thresholds:
@@ -271,116 +135,190 @@ def compute_auc_roc(predictions: list[dict]) -> float:
         tpr_list.append(tp / n_pos)
         fpr_list.append(fp / n_neg)
     tpr_list.append(1.0); fpr_list.append(1.0)
-
-    auc = sum(
-        (fpr_list[i] - fpr_list[i-1]) * (tpr_list[i] + tpr_list[i-1]) / 2
+    return round(sum(
+        (fpr_list[i]-fpr_list[i-1])*(tpr_list[i]+tpr_list[i-1])/2
         for i in range(1, len(tpr_list))
+    ), 4)
+
+
+def compute_rmse(preds: list[dict]) -> float:
+    return round(math.sqrt(
+        sum((p["predicted"] - p["actual"])**2 for p in preds) / len(preds)
+    ), 4)
+
+
+def compute_accuracy(preds: list[dict], threshold: float = 0.5) -> float:
+    return round(
+        sum(1 for p in preds if (p["predicted"] >= threshold) == bool(p["actual"]))
+        / len(preds), 4
     )
-    return round(auc, 4)
 
 
-def compute_rmse(predictions: list[dict]) -> float:
-    errors = [(p["predicted"] - p["actual"]) ** 2 for p in predictions]
-    return round(math.sqrt(sum(errors) / len(errors)), 4)
-
-
-def compute_accuracy(predictions: list[dict], threshold: float = 0.5) -> float:
-    correct = sum(
-        1 for p in predictions
-        if (p["predicted"] >= threshold) == bool(p["actual"])
-    )
-    return round(correct / len(predictions), 4)
-
-
-# ─── 7. Full Evaluation ───────────────────────────────────────────────────────
-def evaluate(
-    test_csv: str,
-    G: nx.DiGraph,
-    use_ontology: bool,
-    rng: random.Random,
-    estimated_params_path: str = "data/estimated_params.json",
-) -> dict:
-    rows       = load_dataset(test_csv)
-    by_student = group_by_student(rows)
-
-    # Load estimated params dari training
-    all_est   = load_estimated_params(estimated_params_path)
-    est_params = all_est["ontologi"] if use_ontology else all_est["baseline"]
-
-    # Level 1: prediction metrics
-    all_preds = []
+# ── Param Recovery ────────────────────────────────────────────────────────────
+def compute_param_recovery_bkt(by_student: dict, G: nx.DiGraph,
+                                est_params: dict) -> float:
+    """BKT+Onto: P(L₀) dari ontologi vs true P(L₀) dari data sintetis."""
+    errors = []
     for student_rows in by_student.values():
-        all_preds.extend(replay_student(student_rows, G, use_ontology, est_params))
+        sid     = student_rows[0]["student_id"]
+        student = init_student(sid, G, est_params)
+        seen = set()
+        for row in student_rows:
+            kc_id = row["kc_id"]
+            if kc_id not in seen:
+                errors.append(
+                    (student.kc_states[kc_id].p_know - row["true_p0"])**2
+                )
+                seen.add(kc_id)
+            process_response(student, G, kc_id, bool(row["correct"]))
+    return round(math.sqrt(sum(errors)/len(errors)), 4) if errors else 0.0
 
-    param_rmse = compute_parameter_recovery(by_student, G, use_ontology)
 
-    # Level 2: adaptive session metrics
-    question_bank = defaultdict(list)
-    for row in rows:
-        question_bank[row["kc_id"]].append(row["correct"])
+def compute_param_recovery_seq(by_student: dict) -> float:
+    """Sequential: P(L₀) flat 0.35 vs true P(L₀). Tidak ada informasi ontologi."""
+    errors = []
+    for student_rows in by_student.values():
+        seen = set()
+        for row in student_rows:
+            if row["kc_id"] not in seen:
+                errors.append((FLAT_PRIOR - row["true_p0"])**2)
+                seen.add(row["kc_id"])
+    return round(math.sqrt(sum(errors)/len(errors)), 4) if errors else 0.0
 
-    session_results = [
-        simulate_adaptive_session(
-            student_id   = sid,
-            G            = G,
-            use_ontology = use_ontology,
-            question_bank= question_bank,
-            rng          = random.Random(rng.randint(0, 9999)),
-            est_params   = est_params,
-        )
-        for sid in by_student
-    ]
 
-    n = len(session_results)
-    return {
-        # Level 1
-        "auc_roc":              compute_auc_roc(all_preds),
-        "rmse":                 compute_rmse(all_preds),
-        "accuracy":             compute_accuracy(all_preds),
-        "param_recovery_rmse":  param_rmse,
-        # Level 2
-        "avg_attempts_per_kc":    round(sum(r["avg_attempts_per_kc"] for r in session_results) / n, 2),
-        "avg_kcs_mastered_pct":   round(sum(r["pct_kcs_mastered"]    for r in session_results) / n, 1),
-        "path_validity_pct":      round(sum(r["path_validity"]        for r in session_results) / n * 100, 1),
-        "pct_students_completed": round(sum(r["completed"]            for r in session_results) / n * 100, 1),
+# ── Path Validity ─────────────────────────────────────────────────────────────
+def compute_path_validity_bkt(G: nx.DiGraph, est_params: dict,
+                               n_sim: int, rng: random.Random) -> float:
+    """Simulasi: berapa persen langkah BKT+Onto valid secara prasyarat."""
+    question_bank = {
+        kc: [1, 1, 0] for kc in G.nodes  # sederhana: 2 benar 1 salah
+    }
+    valid_steps = total_steps = 0
+
+    for i in range(n_sim):
+        student = init_student(f"sim_{i}", G, est_params)
+        for _ in range(200):
+            next_kc = select_next_kc(student, G)
+            if next_kc is None:
+                break
+            prereqs = get_prerequisites(G, next_kc)
+            mastered = {k for k, s in student.kc_states.items() if s.is_mastered}
+            if all(p in mastered for p in prereqs):
+                valid_steps += 1
+            total_steps += 1
+            correct = rng.choice(question_bank[next_kc])
+            process_response(student, G, next_kc, bool(correct))
+
+    return round(valid_steps / total_steps * 100, 1) if total_steps else 0.0
+
+
+def compute_path_validity_seq(G: nx.DiGraph, n_sim: int,
+                               rng: random.Random) -> float:
+    """
+    Sequential: urutan KC tetap. Hitung berapa persen langkah
+    yang prasyaratnya sudah terpenuhi.
+    """
+    order = fixed_kc_order(G)
+    valid_steps = total_steps = 0
+
+    for _ in range(n_sim):
+        mastered = set()
+        for kc_id in order:
+            prereqs = get_prerequisites(G, kc_id)
+            if all(p in mastered for p in prereqs):
+                valid_steps += 1
+            total_steps += 1
+            # Sequential: anggap siswa "menyelesaikan" KC ini
+            # (berhasil mastery setelah N soal tetap)
+            if rng.random() < 0.55:  # probabilitas mastery tiap KC
+                mastered.add(kc_id)
+
+    return round(valid_steps / total_steps * 100, 1) if total_steps else 0.0
+
+
+# ── Full Evaluation ───────────────────────────────────────────────────────────
+def evaluate(train_csv: str, test_csv: str, G: nx.DiGraph,
+             rng: random.Random,
+             estimated_params_path: str = "data/estimated_params.json",
+             n_sim: int = 100) -> tuple[dict, dict]:
+
+    rows_test  = load_dataset(test_csv)
+    by_student = group_by_student(rows_test)
+    all_est    = load_estimated_params(estimated_params_path)
+    est_params = all_est.get("ontologi", {})
+
+    kc_mean     = build_seq_predictor(train_csv)
+    global_mean = sum(kc_mean.values()) / len(kc_mean) if kc_mean else 0.5
+
+    # ── BKT+Ontologi ──
+    print("  Menghitung BKT+Ontologi...")
+    preds_bkt = []
+    for student_rows in by_student.values():
+        preds_bkt.extend(replay_bkt(student_rows, G, est_params))
+
+    pr_bkt  = compute_param_recovery_bkt(by_student, G, est_params)
+    pv_bkt  = compute_path_validity_bkt(G, est_params, n_sim, random.Random(rng.randint(0,99999)))
+
+    bkt_results = {
+        "auc_roc":             compute_auc_roc(preds_bkt),
+        "rmse":                compute_rmse(preds_bkt),
+        "accuracy":            compute_accuracy(preds_bkt),
+        "param_recovery_rmse": pr_bkt,
+        "path_validity_pct":   pv_bkt,
     }
 
+    # ── Sequential Baseline ──
+    print("  Menghitung Sequential Baseline...")
+    preds_seq = []
+    for student_rows in by_student.values():
+        preds_seq.extend(replay_sequential(student_rows, kc_mean, global_mean))
 
-# ─── 8. Run ───────────────────────────────────────────────────────────────────
+    pr_seq  = compute_param_recovery_seq(by_student)
+    pv_seq  = compute_path_validity_seq(G, n_sim, random.Random(rng.randint(0,99999)))
+
+    seq_results = {
+        "auc_roc":             compute_auc_roc(preds_seq),
+        "rmse":                compute_rmse(preds_seq),
+        "accuracy":            compute_accuracy(preds_seq),
+        "param_recovery_rmse": pr_seq,
+        "path_validity_pct":   pv_seq,
+    }
+
+    return bkt_results, seq_results
+
+
+# ── Run ───────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    import os
     os.chdir(Path(__file__).parent)
+    G         = build_ontology("data/math_grade1.json")
+    train_csv = "data/matematika_grade1_train.csv"
+    test_csv  = "data/matematika_grade1_test.csv"
 
-    G        = build_ontology("data/math_grade1.json")
-    test_csv = "data/matematika_grade1_test.csv"
+    print("Menjalankan evaluasi (n_sim=100)...\n")
+    bkt_r, seq_r = evaluate(train_csv, test_csv, G, random.Random(42), n_sim=100)
 
-    print("Evaluating on test set...\n")
-    results = {}
-    for label, use_onto in [("BKT + Ontologi", True), ("BKT Baseline", False)]:
-        print(f"  Running {label}...")
-        results[label] = evaluate(test_csv, G, use_onto, random.Random(42))
-
-    metrics = [
-        ("AUC-ROC",                     "auc_roc",                "↑"),
-        ("RMSE",                        "rmse",                   "↓"),
-        ("Accuracy",                    "accuracy",               "↑"),
-        ("Param Recovery RMSE P(L0)",   "param_recovery_rmse",    "↓"),
-        ("Avg attempts per KC",         "avg_attempts_per_kc",    "↓"),
-        ("Avg KCs mastered (%)",        "avg_kcs_mastered_pct",   "↑"),
-        ("Path validity (%)",           "path_validity_pct",      "↑"),
-        ("Students completed (%)",      "pct_students_completed", "↑"),
+    METRICS = [
+        ("AUC-ROC",                   "auc_roc",             "↑"),
+        ("RMSE",                      "rmse",                "↓"),
+        ("Akurasi",                   "accuracy",            "↑"),
+        ("Param Recovery RMSE P(L₀)", "param_recovery_rmse", "↓"),
+        ("Path Validity (%)",         "path_validity_pct",   "↑"),
     ]
 
-    w = 30
-    print(f"\n{'─'*72}")
-    print(f"  {'Metric':<{w}}  {'BKT+Ontologi':>14}  {'BKT Baseline':>14}  Better")
-    print(f"{'─'*72}")
-    for label, key, direction in metrics:
-        v1 = results["BKT + Ontologi"][key]
-        v2 = results["BKT Baseline"][key]
-        better_model = "BKT+Onto" if (
+    W = 28
+    SEP = "─" * 70
+    print(f"\n{SEP}")
+    print(f"  {'Metrik':<{W}}  {'BKT+Ontologi':>14}  {'Seq Baseline':>12}  Better")
+    print(SEP)
+    for label, key, direction in METRICS:
+        v1, v2 = bkt_r[key], seq_r[key]
+        better = ("BKT+Onto" if (
             (direction == "↑" and v1 > v2) or
             (direction == "↓" and v1 < v2)
-        ) else ("Baseline" if v1 != v2 else "tie")
-        print(f"  {label:<{w}}  {str(v1):>14}  {str(v2):>14}  {better_model}")
-    print(f"{'─'*72}")
+        ) else ("Baseline" if v1 != v2 else "tie"))
+        print(f"  {label:<{W}}  {str(v1):>14}  {str(v2):>12}  {better}")
+    print(SEP)
+    print("\nInterpretasi:")
+    print("  AUC-ROC, RMSE, Akurasi : kualitas prediksi P(benar) per langkah")
+    print("  Param Recovery RMSE    : seberapa akurat sistem menginisialisasi P(L₀)")
+    print("  Path Validity          : % langkah yang valid secara prasyarat kurikulum")
