@@ -65,16 +65,15 @@ def init_db():
         );
 
         CREATE TABLE IF NOT EXISTS questions (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            kc_id         TEXT NOT NULL,
-            question_type TEXT NOT NULL DEFAULT 'pilgan',
-            question      TEXT NOT NULL,
-            opt_a         TEXT NOT NULL DEFAULT '',
-            opt_b         TEXT NOT NULL DEFAULT '',
-            opt_c         TEXT NOT NULL DEFAULT '',
-            opt_d         TEXT NOT NULL DEFAULT '',
-            answer        TEXT NOT NULL,
-            difficulty    INTEGER NOT NULL DEFAULT 1
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            kc_id      TEXT NOT NULL,
+            question   TEXT NOT NULL,
+            opt_a      TEXT NOT NULL,
+            opt_b      TEXT NOT NULL,
+            opt_c      TEXT NOT NULL,
+            opt_d      TEXT NOT NULL,
+            answer     TEXT NOT NULL CHECK(answer IN ('a','b','c','d')),
+            difficulty INTEGER NOT NULL DEFAULT 1
         );
         """)
 
@@ -145,23 +144,16 @@ def get_interaction_count(student_id):
 
 
 # ── Questions ─────────────────────────────────────────────────────────────────
-def insert_question(kc_id, question, opt_a, opt_b, opt_c, opt_d, answer,
-                    difficulty=1, question_type='pilgan'):
-    """
-    question_type:
-      'pilgan'     — 4 pilihan (a/b/c/d)
-      'benar_salah'— 2 opsi: opt_a=teks pertanyaan, answer='benar'/'salah'
-      'isian'      — jawab dengan mengetik angka, answer = angka benar (string)
-    """
+def insert_question(kc_id, question, opt_a, opt_b, opt_c, opt_d, answer, difficulty=1):
+    """answer: 'a'|'b'|'c'|'d' — huruf opsi yang benar."""
     with get_conn() as conn:
         conn.execute(
-            "INSERT INTO questions (kc_id,question_type,question,opt_a,opt_b,opt_c,opt_d,answer,difficulty) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
-            (kc_id, question_type, question, opt_a, opt_b, opt_c, opt_d, str(answer).lower(), difficulty)
+            "INSERT INTO questions (kc_id,question,opt_a,opt_b,opt_c,opt_d,answer,difficulty) VALUES (?,?,?,?,?,?,?,?)",
+            (kc_id, question, opt_a, opt_b, opt_c, opt_d, answer.lower(), difficulty)
         )
 
 def get_random_question(kc_id):
-    """Ambil satu soal acak. Return dict siap pakai frontend."""
+    """Ambil satu soal acak untuk KC tertentu. Return dict siap pakai frontend."""
     with get_conn() as conn:
         row = conn.execute(
             "SELECT * FROM questions WHERE kc_id=? ORDER BY RANDOM() LIMIT 1", (kc_id,)
@@ -169,96 +161,14 @@ def get_random_question(kc_id):
     if not row:
         return None
     r = dict(row)
-    qtype = r.get("question_type", "pilgan")
-
-    base = {"id": r["id"], "kc_id": r["kc_id"], "type": qtype, "q": r["question"]}
-
-    if qtype == "pilgan":
-        opts = {"a": r["opt_a"], "b": r["opt_b"], "c": r["opt_c"], "d": r["opt_d"]}
-        return {**base,
-                "options": [r["opt_a"], r["opt_b"], r["opt_c"], r["opt_d"]],
-                "answer":  opts[r["answer"]]}
-
-    elif qtype == "isian":
-        return {**base, "options": [], "answer": r["answer"]}
-
-    elif qtype == "hitung":
-        # opt_a=emoji, opt_b=jumlah
-        return {**base, "emoji": r["opt_a"], "count": int(r["opt_b"]),
-                "options": [], "answer": r["answer"]}
-
-    elif qtype == "visual_pilgan":
-        # opt_a=emoji, opt_b=jumlah, opt_c/d=opsi salah
-        correct = str(r["answer"])
-        wrongs  = [r["opt_c"], r["opt_d"]]
-        opts    = list(dict.fromkeys([correct] + wrongs))[:4]
-        import random; random.shuffle(opts)
-        return {**base, "emoji": r["opt_a"], "count": int(r["opt_b"]),
-                "options": opts, "answer": correct}
-
-    elif qtype == "jodohkan":
-        # opt_a=emoji, opt_b=jumlah benar, opt_c/d=angka salah
-        correct = str(r["opt_b"])
-        import random
-        wrongs  = [r["opt_c"], r["opt_d"], str(int(r["opt_b"])+3)]
-        opts    = list(dict.fromkeys([correct] + wrongs))[:4]
-        random.shuffle(opts)
-        return {**base, "emoji": r["opt_a"], "count": int(r["opt_b"]),
-                "options": opts, "answer": correct}
-
-    elif qtype == "hitung_warna":
-        # opt_a=string emoji campur, opt_b=emoji target yang dihitung
-        return {**base, "emoji_box": r["opt_a"], "target": r["opt_b"],
-                "options": [], "answer": r["answer"]}
-
-    elif qtype == "visual_tambah":
-        # opt_a=emoji1, opt_b=jml1, opt_c=emoji2, opt_d=jml2, answer=total
-        return {**base,
-                "emoji1": r["opt_a"], "count1": int(r["opt_b"]),
-                "emoji2": r["opt_c"], "count2": int(r["opt_d"]),
-                "options": [], "answer": r["answer"]}
-
-    return None
-    r = dict(row)
-    qtype = r.get("question_type", "pilgan")
-
-    if qtype == "pilgan":
-        opts = {"a": r["opt_a"], "b": r["opt_b"], "c": r["opt_c"], "d": r["opt_d"]}
-        return {"id":r["id"],"kc_id":r["kc_id"],"type":"pilgan","q":r["question"],
-                "options":[r["opt_a"],r["opt_b"],r["opt_c"],r["opt_d"]],"answer":opts[r["answer"]]}
-
-    elif qtype == "isian":
-        return {"id":r["id"],"kc_id":r["kc_id"],"type":"isian","q":r["question"],
-                "options":[],"answer":r["answer"]}
-
-    elif qtype == "hitung":
-        return {"id":r["id"],"kc_id":r["kc_id"],"type":"hitung","q":r["question"],
-                "emoji":r["opt_a"],"count":int(r["opt_b"]),"options":[],"answer":r["answer"]}
-
-    elif qtype == "visual_pilgan":
-        opts = [r["opt_c"], r["opt_d"], str(int(r["opt_b"])), str(int(r["opt_b"])+2)]
-        random.shuffle(opts)
-        return {"id":r["id"],"kc_id":r["kc_id"],"type":"visual_pilgan","q":r["question"],
-                "emoji":r["opt_a"],"count":int(r["opt_b"]),"options":opts,"answer":r["answer"]}
-
-    elif qtype == "jodohkan":
-        correct = str(r["opt_b"])
-        opts = list({correct, r["opt_c"], r["opt_d"], str(int(r["opt_b"])+3)})
-        while len(opts) < 4: opts.append(str(int(correct)+len(opts)))
-        random.shuffle(opts)
-        return {"id":r["id"],"kc_id":r["kc_id"],"type":"jodohkan","q":r["question"],
-                "emoji":r["opt_a"],"count":int(r["opt_b"]),"options":opts[:4],"answer":correct}
-
-    elif qtype == "hitung_warna":
-        return {"id":r["id"],"kc_id":r["kc_id"],"type":"hitung_warna","q":r["question"],
-                "emojis":r["opt_a"],"target":r["opt_b"],"options":[],"answer":r["answer"]}
-
-    elif qtype == "visual_tambah":
-        return {"id":r["id"],"kc_id":r["kc_id"],"type":"visual_tambah","q":r["question"],
-                "emoji1":r["opt_a"],"count1":int(r["opt_b"]),
-                "emoji2":r["opt_c"],"count2":int(r["opt_d"]),"options":[],"answer":r["answer"]}
-
-    return None
+    opts = {"a": r["opt_a"], "b": r["opt_b"], "c": r["opt_c"], "d": r["opt_d"]}
+    return {
+        "id":      r["id"],
+        "kc_id":   r["kc_id"],
+        "q":       r["question"],
+        "options": [r["opt_a"], r["opt_b"], r["opt_c"], r["opt_d"]],
+        "answer":  opts[r["answer"]],  # teks jawaban benar
+    }
 
 def count_questions(kc_id=None):
     with get_conn() as conn:
