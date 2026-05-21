@@ -1,11 +1,10 @@
 """
 retrain.py — Re-estimasi parameter BKT dari data interaksi nyata siswa.
-Jalankan SETELAH export_data.py.
 
-Alur:
+flow:
   real_interactions.csv → param_estimator (grid search) → estimated_params.json (diupdate)
 
-Setelah selesai, restart app.py agar model pakai parameter baru.
+Then next app.py should be restart agar model pakai parameter baru.
 """
 
 import csv, json, math, itertools, os, sys
@@ -77,7 +76,9 @@ def load_real_data() -> dict:
     data = defaultdict(lambda: defaultdict(list))
     with open(REAL_DATA, encoding="utf-8") as f:
         for row in csv.DictReader(f):
-            data[row["kc_id"]][row["student_id"]].append(int(row["correct"]))
+            # Support both student_id and name as identifier
+            sid = row.get("student_id") or row.get("name") or "unknown"
+            data[row["kc_id"]][sid].append(int(row["correct"]))
 
     return data
 
