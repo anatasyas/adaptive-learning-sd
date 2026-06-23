@@ -336,4 +336,5 @@ def questions_seeded():
 
 if __name__ == "__main__":
     init_db()
+    seed_ontology()
     print("DB ready:", DB_PATH)
