@@ -287,3 +287,55 @@ if __name__ == "__main__":
     # debug=False untuk production (Render/Replit)
     debug = os.environ.get("FLASK_ENV") == "development"
     app.run(host="0.0.0.0", port=port, debug=debug)
+
+
+# ── Topics endpoint (dibutuhkan frontend) ─────────────────────────────────────
+TOPIC_ORDER  = ["bilangan", "operasi", "geometri", "pengukuran", "pola"]
+TOPIC_LABELS = {
+    "bilangan":   "Bilangan",
+    "operasi":    "Operasi Bilangan",
+    "geometri":   "Geometri",
+    "pengukuran": "Pengukuran",
+    "pola":       "Pola & Aljabar",
+}
+
+@app.get("/api/topics/<sid>")
+def get_topics(sid):
+    db_states = get_all_kc_states(sid)
+
+    # Hitung mastered per topic
+    topic_stats = {}
+    for topic in TOPIC_ORDER:
+        kcs_in_topic = [n for n, d in G.nodes(data=True) if d.get("topic") == topic]
+        n_mastered   = sum(1 for kc in kcs_in_topic
+                           if db_states.get(kc, {}).get("is_mastered", False))
+        topic_stats[topic] = {
+            "n_total":    len(kcs_in_topic),
+            "n_mastered": n_mastered,
+            "completed":  n_mastered == len(kcs_in_topic) and len(kcs_in_topic) > 0,
+        }
+
+    # Topik terkunci: bilangan harus selesai sebelum operasi, dst
+    unlocked = set()
+    result   = []
+    for i, topic in enumerate(TOPIC_ORDER):
+        s = topic_stats[topic]
+        # Bilangan selalu unlocked; selainnya unlocked kalau topic sebelumnya ada kemajuan
+        locked = False
+        if i > 0:
+            prev_topic = TOPIC_ORDER[i - 1]
+            locked = topic_stats[prev_topic]["n_mastered"] == 0
+
+        if not locked:
+            unlocked.add(topic)
+
+        result.append({
+            "id":         topic,
+            "label":      TOPIC_LABELS.get(topic, topic),
+            "n_mastered": s["n_mastered"],
+            "n_total":    s["n_total"],
+            "completed":  s["completed"],
+            "locked":     locked,
+        })
+
+    return jsonify(result)
