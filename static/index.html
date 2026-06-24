@@ -180,7 +180,6 @@ body{font-family:'Nunito',sans-serif;background:linear-gradient(160deg,#E3F2FD 0
     <div style="font-size:1rem;font-weight:800;color:var(--ink);margin-bottom:2px;">Pilih Topik 📚</div>
     <div class="subtitle" style="text-align:left;font-size:0.82rem;">Mau belajar apa hari ini?</div>
     <div class="topic-grid" id="topic-grid"></div>
-    <button class="btn btn-ghost" id="btn-random" style="margin-top:10px;font-size:0.88rem;">🎲 Pilihkan untukku!</button>
   </div>
 </div>
 
@@ -303,14 +302,7 @@ function renderTopics(topics){
   });
 }
 async function startTopic(id){state.topic=id;show("question");await loadNextQuestion();}
-document.getElementById("btn-random").addEventListener("click",async()=>{
-  try{
-    const topics=await api(`/api/topics/${state.sid}`);
-    const avail=topics.filter(t=>!t.locked&&!t.completed);
-    if(!avail.length){showToast("Semua topik selesai! 🎉");return;}
-    startTopic(avail.sort((a,b)=>(a.n_mastered/a.n_total)-(b.n_mastered/b.n_total))[0].id);
-  }catch(e){alert(e.message);}
-});
+
 document.getElementById("btn-back").addEventListener("click",()=>{state.topic=null;show("topics");loadTopics();});
 document.getElementById("btn-back-topics").addEventListener("click",()=>{show("topics");loadTopics();});
 
