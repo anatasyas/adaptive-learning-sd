@@ -13,7 +13,29 @@ import networkx as nx
 from pathlib import Path
 
 
-def build_ontology(data_path: str) -> nx.DiGraph:
+def build_ontology(data_path: str = None) -> nx.DiGraph:
+    """
+    Load ontologi dari SQLite (prioritas) atau JSON (fallback).
+    Jika data_path=None, otomatis cari DB terlebih dahulu.
+    """
+    import os as _os
+
+    # Coba load dari SQLite terlebih dahulu
+    try:
+        from database import get_conn, DB_PATH
+        with get_conn() as conn:
+            n = conn.execute("SELECT COUNT(*) FROM knowledge_components").fetchone()[0]
+        if n > 0:
+            return _build_from_db()
+    except Exception:
+        pass
+
+    # Fallback ke JSON
+    if data_path is None:
+        data_path = _os.path.join(
+            _os.path.dirname(_os.path.abspath(__file__)),
+            "data", "math_grade1.json"
+        )
     path = Path(data_path)
     if not path.exists():
         raise FileNotFoundError(f"Data file tidak ditemukan: {data_path}")
@@ -26,6 +48,27 @@ def build_ontology(data_path: str) -> nx.DiGraph:
         G.add_node(kc["id"], **kc)
     for prereq, kc in data["prerequisites"]:
         G.add_edge(prereq, kc, relation="hasPrerequisite")
+    return G
+
+
+def _build_from_db() -> nx.DiGraph:
+    """Build graf ontologi dari tabel SQLite."""
+    from database import get_conn
+    G = nx.DiGraph()
+    with get_conn() as conn:
+        kcs = conn.execute(
+            "SELECT id, name, topic, difficulty, cp_ref, nctm_ref "
+            "FROM knowledge_components"
+        ).fetchall()
+        rels = conn.execute(
+            "SELECT kc_from, kc_to FROM prerequisites"
+        ).fetchall()
+    for kc in kcs:
+        G.add_node(kc["id"], id=kc["id"], name=kc["name"],
+                   topic=kc["topic"], difficulty=kc["difficulty"],
+                   cp_ref=kc["cp_ref"], nctm_ref=kc["nctm_ref"])
+    for rel in rels:
+        G.add_edge(rel["kc_from"], rel["kc_to"], relation="hasPrerequisite")
     return G
 
 
