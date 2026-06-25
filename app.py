@@ -12,10 +12,13 @@ sys.path.insert(0, os.path.dirname(__file__))
 from ontology   import build_ontology, get_kc_info, get_available_kcs, get_ontology_informed_prior
 from bkt_engine import (KCState, StudentModel, bkt_update, process_response,
                         select_next_kc, DEFAULT_BKT_PARAMS, KC_PARAM_OVERRIDES)
-from database   import (init_db, create_student, get_student, add_stars, get_random_question,
-                        upsert_kc_state, get_all_kc_states, get_mastered_kcs,
-                        get_kc_state, log_interaction, get_interaction_count,
-                        get_random_question)
+from database import (
+    init_db, create_student, get_student, add_stars, 
+    get_random_question, upsert_kc_state, get_all_kc_states, 
+    get_mastered_kcs, get_kc_state, log_interaction, 
+    get_interaction_count, count_questions,   # ← TAMBAHKAN INI
+    seed_ontology
+)
 
 import json
 from pathlib import Path
