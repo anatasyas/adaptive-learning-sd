@@ -1,9 +1,26 @@
 services:
   - type: web
     name: adaptive-learning-sd
-    runtime: python3
-    buildCommand: pip install -r requirements.txt && python database.py && python seed_questions.py
-    startCommand: python app.py
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -c "
+import os, sys
+os.chdir('/opt/render/project/src')
+sys.path.insert(0, '.')
+from database import init_db, seed_ontology, count_questions
+from seed_questions import seed
+init_db()
+seed_ontology()
+if count_questions() == 0:
+    seed()
+print('✅ Seeding completed on Render')
+" && python app.py
     envVars:
       - key: FLASK_ENV
         value: production
+      - key: ADMIN_KEY
+        value: skripsi2025
+    disk:
+      name: dbdata
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
