@@ -28,29 +28,28 @@ BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH  = os.path.join(BASE_DIR, "data", "math_grade1.json")
 PARAM_PATH = os.path.join(BASE_DIR, "data", "estimated_params.json")
 
-# Force init dulu
+# Inisialisasi DB + Seeding (wajib di production)
 init_db()
 
-# Seed ontology & questions
+# Import seeding functions
 from database import seed_ontology
 from seed_questions import seed
 
-seed_ontology(DATA_PATH)   # pakai path eksplisit
-if not questions_seeded():  # dari database.py
-    seed()
+print("🔄 Running seeding...")
+seed_ontology(DATA_PATH)                    # Seed KC & prerequisites
 
-# Baru load ontology
+# Seed questions jika belum ada
+if count_questions() == 0:                  # Langsung panggil dari database
+    seed()
+    print("✅ Questions seeded")
+else:
+    print("✅ Questions already seeded")
+
+# Load Ontology SETELAH seeding
 G = build_ontology(DATA_PATH)
 
-print(f"✅ Ontology loaded: {G.number_of_nodes()} KC")
-print(f"✅ Topics available: {len(TOPIC_ORDER)}")
-
-# Load estimated params jika ada
-estimated_params = {}
-if Path(PARAM_PATH).exists():
-    with open(PARAM_PATH) as f:
-        estimated_params = json.load(f).get("ontologi", {})
-
+print(f"✅ Ontology loaded successfully: {G.number_of_nodes()} KC nodes")
+print(f"✅ Topics in ontology: {len(TOPIC_ORDER)}")
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 def _rebuild_student_model(student_id: str) -> StudentModel:
