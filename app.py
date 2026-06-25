@@ -31,28 +31,39 @@ BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH  = os.path.join(BASE_DIR, "data", "math_grade1.json")
 PARAM_PATH = os.path.join(BASE_DIR, "data", "estimated_params.json")
 
-# Inisialisasi DB + Seeding (wajib di production)
+# Inisialisasi DB + Seeding
 init_db()
 
-# Import seeding functions
 from database import seed_ontology
 from seed_questions import seed
 
 print("🔄 Running seeding...")
-seed_ontology(DATA_PATH)                    # Seed KC & prerequisites
+seed_ontology(DATA_PATH)
 
 # Seed questions jika belum ada
-if count_questions() == 0:                  # Langsung panggil dari database
+if count_questions() == 0:
     seed()
-    print("✅ Questions seeded")
+    print("✅ Questions seeded successfully")
 else:
-    print("✅ Questions already seeded")
+    print(f"✅ Questions already exist ({count_questions()} soal)")
 
-# Load Ontology SETELAH seeding
+# Load Ontology setelah seeding
 G = build_ontology(DATA_PATH)
 
 print(f"✅ Ontology loaded successfully: {G.number_of_nodes()} KC nodes")
+
+# Definisi TOPIC_ORDER (dipindah ke atas supaya aman)
+TOPIC_ORDER  = ["bilangan", "operasi", "geometri", "pengukuran", "pola"]
+TOPIC_LABELS = {
+    "bilangan":   "Bilangan",
+    "operasi":    "Operasi Bilangan",
+    "geometri":   "Geometri",
+    "pengukuran": "Pengukuran",
+    "pola":       "Pola & Aljabar",
+}
+
 print(f"✅ Topics in ontology: {len(TOPIC_ORDER)}")
+print("🚀 App boot completed!")
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 def _rebuild_student_model(student_id: str) -> StudentModel:
