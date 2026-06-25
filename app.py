@@ -28,15 +28,28 @@ BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH  = os.path.join(BASE_DIR, "data", "math_grade1.json")
 PARAM_PATH = os.path.join(BASE_DIR, "data", "estimated_params.json")
 
-G = build_ontology(DATA_PATH)
+# Force init dulu
 init_db()
+
+# Seed ontology & questions
+from database import seed_ontology
+from seed_questions import seed
+
+seed_ontology(DATA_PATH)   # pakai path eksplisit
+if not questions_seeded():  # dari database.py
+    seed()
+
+# Baru load ontology
+G = build_ontology(DATA_PATH)
+
+print(f"✅ Ontology loaded: {G.number_of_nodes()} KC")
+print(f"✅ Topics available: {len(TOPIC_ORDER)}")
 
 # Load estimated params jika ada
 estimated_params = {}
 if Path(PARAM_PATH).exists():
     with open(PARAM_PATH) as f:
         estimated_params = json.load(f).get("ontologi", {})
-
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
