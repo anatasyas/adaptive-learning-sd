@@ -13,7 +13,7 @@ init_db()
 seed_ontology()
 if count_questions() == 0:
     seed()
-print('✅ Seeding completed on Render')
+print('✅ Full seeding completed on Render')
 " && python app.py
     envVars:
       - key: FLASK_ENV
